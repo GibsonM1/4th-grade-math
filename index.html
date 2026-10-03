@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Math Realm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  /* ── Login ── */
+  .login { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 22px; padding: 32px 18px 48px; }
+  .wordmark { font-size: clamp(3rem, 11vw, 5rem); text-align: center; letter-spacing: -.01em; }
+  .wordmark span { display: inline-block; text-shadow: 0 4px 0 rgba(16, 8, 46, .55); }
+  .wordmark span:nth-child(odd) { transform: rotate(-4deg) translateY(2px); }
+  .wordmark span:nth-child(even) { transform: rotate(3deg); }
+  .login .tagline { margin: -10px 0 0; color: var(--haze); font-size: 1.1rem; text-align: center; }
+  .login-card { width: min(420px, 100%); padding: 28px 26px 26px; }
+  .login-card h2 { font-size: 1.5rem; margin-bottom: 18px; color: var(--violet); }
+
+  /* ── Home ── */
+  .hub { max-width: 1120px; margin: 0 auto; padding: 26px 20px 64px; }
+  .hub-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; margin-bottom: 24px; }
+  .hub-top h1 { font-size: clamp(2.1rem, 6vw, 3rem); }
+  .hub-tools { display: flex; align-items: center; gap: 12px; }
+  .gems { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 6px 8px; border-radius: 999px; background: rgba(255, 255, 255, .12); border: 2px solid rgba(255, 255, 255, .28); font-weight: 600; }
+  .gems svg { width: 30px; height: 30px; }
+  .gems strong { font-family: var(--display); font-size: 1.45rem; font-weight: 800; }
+
+  .shelf { margin-bottom: 28px; }
+  .shelf h2 { font-size: 1.6rem; }
+  .shelf p { margin: 4px 0 14px; color: var(--haze); }
+  .tickets { display: flex; flex-wrap: wrap; gap: 14px 22px; padding-left: 10px; }
+
+  .how { margin: 0 0 16px; color: var(--haze); }
+  .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 24px; align-items: start; }
+  .zone { overflow: hidden; }
+  .zone[data-accent="mint"]  { --accent: var(--mint-deep);  --wash: #E2F8F0; }
+  .zone[data-accent="berry"] { --accent: var(--berry);      --wash: #FFEAF3; }
+  .zone[data-accent="sky"]   { --accent: var(--sky-deep);   --wash: #E5F2FF; }
+  .zone-head { padding: 20px 24px 16px; background: var(--wash); border-bottom: 3px dashed var(--accent); }
+  .zone-head h2 { font-size: 1.85rem; color: var(--accent); }
+  .zone-head p { margin: 4px 0 0; color: var(--ink-soft); }
+  .skills { list-style: none; margin: 0; padding: 4px 16px 12px; }
+  .skill { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px 14px; padding: 13px 6px; border-bottom: 2px solid #F1EBFB; }
+  .skill:last-child { border-bottom: 0; }
+  .skill-name { font-weight: 600; }
+  .skill-name .badge { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; font-size: .8rem; background: #FFF1C2; color: #7A5600; vertical-align: 2px; }
+  .skill-name .ticket-mark { display: inline-block; width: 22px; height: 22px; margin-left: 6px; vertical-align: -5px; }
+  .soon { font-size: .9rem; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+  @media (max-width: 500px) {
+    .skill { grid-template-columns: minmax(0, 1fr) auto; }
+    .skill .stars { grid-row: 2; }
+  }
+</style>
+</head>
+<body class="twinkle">
+<div class="page">
+
+  <!-- Login -->
+  <main class="login" id="loginView" hidden>
+    <h1 class="wordmark" id="wordmark">Math Realm</h1>
+    <p class="tagline">Log in to start your adventure.</p>
+    <section class="login-card card" aria-labelledby="loginTitle">
+      <h2 id="loginTitle">Who's playing?</h2>
+      <form id="loginForm" autocomplete="off" novalidate>
+        <label class="field"><span>Class code</span><input name="classCode" autocapitalize="characters" spellcheck="false" required></label>
+        <label class="field"><span>Student ID</span><input name="studentId" spellcheck="false" required></label>
+        <label class="field"><span>PIN</span><input name="pin" type="password" inputmode="numeric"></label>
+        <p class="form-error" id="loginError" role="alert" hidden></p>
+        <button class="btn btn-big" type="submit" id="loginBtn">Let's go!</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Home -->
+  <main class="hub" id="hubView" hidden>
+    <header class="hub-top">
+      <h1 id="hello">Hi!</h1>
+      <div class="hub-tools">
+        <div class="gems" id="gems">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+          <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+        </div>
+        <button class="btn btn-soft btn-small" type="button" id="logoutBtn">Log out</button>
+      </div>
+    </header>
+
+    <div class="banner" id="pendingBanner" role="status" hidden>
+      <span id="pendingText"></span>
+      <button class="btn btn-small" type="button" id="sendNowBtn">Send now</button>
+    </div>
+
+    <section class="shelf" id="shelf" hidden aria-labelledby="shelfTitle">
+      <h2 id="shelfTitle">Your golden tickets</h2>
+      <p>Show the code to your teacher to trade it for a prize.</p>
+      <div class="tickets" id="tickets"></div>
+    </section>
+
+    <p class="how">Every great round earns a star for that day. Fill all the stars to master a skill!</p>
+    <div class="zones" id="zones"></div>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function () {
+  'use strict';
+  const C = window.MATH_REALM_CATALOG;
+  const $ = s => document.querySelector(s);
+  const CLASS_KEY = 'mathRealm.classCode';
+  const STAR_PATH = 'M14 2.8l3.4 7 7.7 1-5.6 5.3 1.4 7.6L14 19.9l-6.9 3.8 1.4-7.6-5.6-5.3 7.7-1z';
+  const TICKET_PATH = 'M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z';
+  const LETTER_COLORS = ['#FF7EB6', '#7CC8FF', '#FFD84D', '#4FD1AB', '#C9A8FF'];
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function svg(tag, attrs) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs || {}).forEach(k => e.setAttribute(k, attrs[k]));
+    return e;
+  }
+
+  // Realm name, one candy color per letter
+  document.title = C.realmName;
+  const mark = $('#wordmark');
+  mark.replaceChildren();
+  mark.setAttribute('aria-label', C.realmName);
+  let n = 0;
+  Array.from(C.realmName).forEach(ch => {
+    if (ch === ' ') { mark.append(' '); return; }
+    const s = el('span', '', ch);
+    s.style.color = LETTER_COLORS[n++ % LETTER_COLORS.length];
+    s.setAttribute('aria-hidden', 'true');
+    mark.append(s);
+  });
+  $('#gemName').textContent = C.pointsName;
+
+  // Only same-site game pages are allowed as a place to return to after login.
+  function safeNext() {
+    const next = new URLSearchParams(location.search).get('next') || '';
+    return /^[A-Za-z0-9_-]+\.html(\?[A-Za-z0-9=&._%-]*)?$/.test(next) ? next : '';
+  }
+
+  /* ── Login ── */
+
+  function showLogin(message) {
+    document.body.classList.add('twinkle');
+    $('#hubView').hidden = true;
+    $('#loginView').hidden = false;
+    const f = $('#loginForm');
+    try { f.classCode.value = f.classCode.value || localStorage.getItem(CLASS_KEY) || ''; } catch (e) { /* storage blocked */ }
+    showError(message || '');
+    (f.classCode.value ? f.studentId : f.classCode).focus();
+  }
+  function showError(text) {
+    $('#loginError').textContent = text;
+    $('#loginError').hidden = !text;
+  }
+
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const classCode = f.classCode.value.trim();
+    const studentId = f.studentId.value.trim();
+    if (!classCode || !studentId) { showError(MathRealm.errorMessage('missing_fields', true)); return; }
+    const btn = $('#loginBtn');
+    btn.disabled = true;
+    btn.textContent = 'Opening the gates…';
+    const d = await MathRealm.login(classCode, studentId, f.pin.value.trim());
+    btn.disabled = false;
+    btn.textContent = "Let's go!";
+    if (!d.ok) { showError(MathRealm.errorMessage(d.error, true)); return; }
+    try { localStorage.setItem(CLASS_KEY, classCode.toUpperCase()); } catch (err) { /* fine */ }
+    f.studentId.value = '';
+    f.pin.value = '';
+    const next = safeNext();
+    if (next) { location.href = next; return; }
+    showHub(true);
+  });
+
+  /* ── Home ── */
+
+  function showHub(celebrate) {
+    document.body.classList.remove('twinkle');
+    $('#loginView').hidden = true;
+    $('#hubView').hidden = false;
+    if (location.search) history.replaceState(null, '', location.pathname);
+    render(celebrate);
+  }
+
+  function render(celebrate) {
+    const s = MathRealm.session;
+    if (!s) return;
+    $('#hello').textContent = 'Hi, ' + s.student.displayName + '!';
+    $('#gemCount').textContent = Number(s.student.points || 0).toLocaleString();
+    $('#gems').setAttribute('aria-label', s.student.points + ' ' + C.pointsName);
+    renderTickets(s.tickets || []);
+    renderZones(s, celebrate);
+    renderPending();
+  }
+
+  function renderTickets(list) {
+    const box = $('#tickets');
+    box.replaceChildren();
+    $('#shelf').hidden = list.length === 0;
+    list.slice().reverse().forEach(t => {
+      const stub = el('div', 'ticket' + (t.redeemed ? ' used' : ''));
+      stub.append(el('strong', '', t.code), el('span', '', t.redeemed ? 'Traded in. Nice work!' : t.skillName));
+      box.append(stub);
+    });
+  }
+
+  function zonesFor(skills) {
+    const zones = new Map();
+    C.zones.forEach(z => zones.set(z.zone, Object.assign({ skills: [] }, z)));
+    skills.forEach(k => {
+      if (!zones.has(k.zone)) zones.set(k.zone, { zone: k.zone, title: k.zone || 'More practice', blurb: '', accent: 'sky', skills: [] });
+      zones.get(k.zone).skills.push(k);
+    });
+    return Array.from(zones.values()).filter(z => z.skills.length);
+  }
+
+  function gameFor(skillId) {
+    return C.games.find(g => skillId.indexOf(g.prefix) === 0) || null;
+  }
+
+  function starRow(have, need, mastered, celebrate) {
+    const row = el('div', 'stars' + (mastered ? ' mastered' : '') + (celebrate ? ' pop' : ''));
+    row.setAttribute('role', 'img');
+    row.setAttribute('aria-label', mastered ? 'Mastered' : have + ' of ' + need + ' stars');
+    for (let i = 0; i < need; i++) {
+      const on = mastered || i < have;
+      const star = svg('svg', { viewBox: '0 0 28 28', class: 'star' + (on ? ' on' : ''), 'aria-hidden': 'true' });
+      star.style.setProperty('--i', i);
+      star.append(svg('path', { d: STAR_PATH }));
+      row.append(star);
+    }
+    return row;
+  }
+
+  function renderZones(s, celebrate) {
+    const wrap = $('#zones');
+    wrap.replaceChildren();
+    if (!s.skills || !s.skills.length) {
+      wrap.append(el('p', 'how', 'No games are set up yet. Tell your teacher.'));
+      return;
+    }
+    zonesFor(s.skills).forEach(z => {
+      const card = el('section', 'zone card');
+      card.dataset.accent = z.accent || 'sky';
+      const head = el('header', 'zone-head');
+      head.append(el('h2', '', z.title));
+      if (z.blurb) head.append(el('p', '', z.blurb));
+      const list = el('ul', 'skills');
+
+      z.skills.forEach(k => {
+        const m = s.mastery[k.skillId] || { status: '', days: 0 };
+        const mastered = m.status === 'mastered';
+        const li = el('li', 'skill');
+
+        const name = el('div', 'skill-name', k.name);
+        if (k.milestone) {
+          const t = svg('svg', { viewBox: '0 0 24 24', class: 'ticket-mark', role: 'img' });
+          const title = svg('title'); title.textContent = 'Master this to win a golden ticket';
+          t.append(title, svg('path', { d: TICKET_PATH, fill: '#FFD84D', stroke: '#E8A90C', 'stroke-width': '1.5' }));
+          name.append(t);
+        }
+        if (mastered) name.append(el('span', 'badge', 'Mastered!'));
+
+        const game = gameFor(k.skillId);
+        let action;
+        if (game && game.ready) {
+          action = el('a', 'btn btn-small' + (mastered ? ' btn-soft' : ''), mastered ? 'Play again' : 'Play');
+          action.href = game.page + '?skill=' + encodeURIComponent(k.skillId);
+          action.setAttribute('aria-label', (mastered ? 'Play again: ' : 'Play: ') + k.name);
+        } else {
+          action = el('span', 'soon', 'Opening soon');
+        }
+
+        li.append(name, starRow(Math.min(m.days || 0, k.daysNeeded), k.daysNeeded, mastered, celebrate), action);
+        list.append(li);
+      });
+
+      card.append(head, list);
+      wrap.append(card);
+    });
+  }
+
+  function renderPending() {
+    const count = MathRealm.pendingCount();
+    $('#pendingBanner').hidden = count === 0;
+    $('#pendingText').textContent = count === 1
+      ? '1 round is saved on this computer and will send when the internet is back.'
+      : count + ' rounds are saved on this computer and will send when the internet is back.';
+  }
+
+  $('#sendNowBtn').addEventListener('click', async e => {
+    const btn = e.currentTarget;          // currentTarget is gone after the await, so keep it
+    btn.disabled = true;
+    await MathRealm.flushPending();
+    btn.disabled = false;
+    render(false);
+  });
+
+  $('#logoutBtn').addEventListener('click', async () => {
+    await MathRealm.logout();
+    showLogin('');
+  });
+
+  window.addEventListener('online', () => setTimeout(() => MathRealm.flushPending().then(() => render(false)), 500));
+
+  /* ── Start ── */
+
+  if (!MathRealm.isLoggedIn()) {
+    showLogin('');
+  } else {
+    const next = safeNext();
+    if (next) { location.replace(next); return; }
+    showHub(true);
+    // Fresh numbers from the server (a teacher may have redeemed a ticket), then send anything waiting.
+    const snapshot = () => JSON.stringify(MathRealm.session);
+    const before = snapshot();
+    MathRealm.refresh().then(d => {
+      if (d.ok) return MathRealm.flushPending().then(() => { if (snapshot() !== before) render(false); });
+      if (d.error === 'session_expired') showLogin(MathRealm.errorMessage('session_expired', true));
+    });
+  }
+})();
+</script>
+</body>
+</html>
