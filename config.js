@@ -5,5 +5,5 @@
  * the URL alone can't read student data without a class code and student ID.
  */
 window.MATH_REALM_CONFIG = {
-  apiUrl: 'PASTE_YOUR_WEB_APP_URL_HERE',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbw0aJTGtrV71RwhzxyzBezRYdyGrB6qIqHVx2keK0Tbj6p_tz9D1f4oP8VvaelehnQV/exec',
 };
