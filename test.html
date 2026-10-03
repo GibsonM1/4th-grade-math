@@ -224,7 +224,9 @@
   function renderSession() {
     const s = MathRealm.session;
     const on = MathRealm.isLoggedIn();
-    document.querySelectorAll('[data-kind], #skill, #btnSave').forEach(b => { b.disabled = !on; });
+    const hasSkills = on && s.skills && s.skills.length > 0;
+    document.querySelectorAll('[data-kind], #skill').forEach(b => { b.disabled = !hasSkills; });
+    $('#btnSave').disabled = !on;
     $('#btnResend').disabled = !on || !lastRound;
     const box = $('#progress');
     box.hidden = !on;
@@ -240,6 +242,11 @@
     if (keep) sel.value = keep;
 
     box.replaceChildren();
+    if (!hasSkills) {
+      box.append(el('h3', '', 'Logged in, but the Skills tab is empty'),
+        el('p', '', 'In the Sheet, choose Math Realm ▸ Set up tabs to fill in the starting skills, then log in again here.'));
+      return;
+    }
     box.append(el('h3', '', s.student.displayName + ' has ' + s.student.points + ' points (' + s.student.lifetimePoints + ' earned all-time)'));
     const wrap = el('div', 'table-wrap');
     const table = el('table');
@@ -314,6 +321,7 @@
   document.querySelectorAll('[data-kind]').forEach(btn => btn.addEventListener('click', async () => {
     const skillId = $('#skill').value;
     const skill = MathRealm.session.skills.find(k => k.skillId === skillId);
+    if (!skill) return;
     const attempts = fakeAttempts(skillId, btn.dataset.kind, Math.max(skill.minItems, 10));
     const roundId = MathRealm.newId();
     const d = await run(btn, 'submitRound', () => MathRealm.submitRound('workshop-test', skillId, attempts, roundId), summarizeRound);
