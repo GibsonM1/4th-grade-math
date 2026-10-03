@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Realm workshop: server test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fredoka:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2B1D3F;
+    --ink-soft: #5E4F74;
+    --paper: #F6F2FC;
+    --card: #FFFFFF;
+    --line: #DED4EF;
+    --berry: #B83D7A;
+    --berry-dark: #962F62;
+    --berry-wash: #FBEFF5;
+    --mint: #1F8F68;
+    --coral: #C9423E;
+    --gold: #D9A426;
+    --gold-pale: #FFF4D6;
+    --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif;
+    --body: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--body); }
+  code { font-family: var(--mono); font-size: .9em; }
+
+  header { max-width: 1180px; margin: 0 auto; padding: 32px 24px 20px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: 2.1rem; line-height: 1.1; margin: 0; }
+  header p { margin: 6px 0 0; color: var(--ink-soft); max-width: 58ch; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 7px 15px; border-radius: 999px; background: var(--card); border: 2px solid var(--line); font-weight: 700; font-size: .92rem; }
+  .status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .status[data-state="ok"] .dot { background: var(--mint); }
+  .status[data-state="fail"] .dot { background: var(--coral); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 0 24px 56px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+
+  .steps { display: flex; flex-direction: column; gap: 16px; counter-reset: step; }
+  .step { background: var(--card); border: 2px solid var(--line); border-radius: 18px; padding: 20px 22px 22px; }
+  .step h2 { font-family: var(--display); font-weight: 600; font-size: 1.3rem; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+  .step h2::before { counter-increment: step; content: counter(step); flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: #fff; font-size: .95rem; }
+  .step[data-done="true"] { border-color: #B9E2D2; }
+  .step[data-done="true"] h2::before { background: var(--mint); content: "✓"; }
+  .step[data-done="false"] h2::before { background: var(--coral); }
+  .step p { margin: 0 0 14px; color: var(--ink-soft); max-width: 62ch; }
+  .url { font-family: var(--mono); font-size: .82rem; word-break: break-all; background: var(--paper); border-radius: 8px; padding: 8px 10px; color: var(--ink); }
+
+  .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
+  label { display: flex; flex-direction: column; gap: 4px; font-weight: 700; font-size: .9rem; }
+  input, select { font: inherit; font-weight: 400; padding: 9px 11px; border: 2px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); min-width: 0; }
+  select { margin-bottom: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .row + .row { margin-top: 10px; }
+
+  button { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 12px; border: 2px solid var(--berry); background: var(--berry); color: #fff; cursor: pointer; }
+  button:hover { background: var(--berry-dark); border-color: var(--berry-dark); }
+  button.quiet { background: #fff; color: var(--berry); }
+  button.quiet:hover { background: var(--berry-wash); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button[aria-busy="true"] { cursor: progress; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .hint { font-size: .88rem; margin: 14px 0 0 !important; }
+
+  .progress { margin-top: 16px; border-top: 2px dashed var(--line); padding-top: 14px; }
+  .progress h3 { font-family: var(--display); font-weight: 500; font-size: 1.05rem; margin: 0 0 8px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:nth-child(n+2), th:nth-child(n+2) { white-space: nowrap; }
+  th { color: var(--ink-soft); font-weight: 700; }
+  td.st[data-s="mastered"] { color: var(--mint); font-weight: 700; }
+  td.st[data-s="practicing"] { color: var(--berry); font-weight: 700; }
+
+  .log-panel { position: sticky; top: 16px; background: var(--ink); color: #F3ECFF; border-radius: 18px; padding: 18px 20px 10px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  @media (max-width: 880px) { .log-panel { position: static; max-height: none; } }
+  .log-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .log-head h2 { font-family: var(--display); font-weight: 500; font-size: 1.2rem; margin: 0; }
+  .log-head button { background: transparent; border-color: rgba(255,255,255,.3); color: #F3ECFF; padding: 6px 12px; font-size: .88rem; }
+  .log-head button:hover { background: rgba(255,255,255,.1); }
+  .log { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+  .empty { color: #C8BCDD; margin: 10px 0 14px; }
+  .entry { border-top: 1px solid rgba(255,255,255,.14); padding: 12px 0; }
+  .entry .head { display: flex; align-items: baseline; gap: 10px; }
+  .badge { font-weight: 700; font-size: .8rem; padding: 2px 8px; border-radius: 999px; }
+  .entry[data-ok="true"] .badge { background: #2F6F59; color: #E2FFF3; }
+  .entry[data-ok="false"] .badge { background: #8E2F33; color: #FFE6E6; }
+  .act { font-family: var(--mono); font-size: .85rem; color: #E6DAFA; }
+  .time { margin-left: auto; font-size: .8rem; color: #B9ACD0; }
+  .sum { margin: 6px 0 0; }
+  .entry details { margin-top: 6px; }
+  .entry summary { cursor: pointer; font-size: .85rem; color: #C8BCDD; }
+  .entry pre { font-family: var(--mono); font-size: .78rem; white-space: pre-wrap; word-break: break-word; background: rgba(255,255,255,.07); padding: 10px; border-radius: 8px; margin: 6px 0 0; max-height: 280px; overflow: auto; }
+
+  /* The one showy thing: a ticket stub when a milestone is mastered */
+  .ticket { margin-top: 10px; display: flex; align-items: center; gap: 14px; background: var(--gold-pale); color: var(--ink); border-radius: 12px; padding: 12px 16px; position: relative; border: 2px solid var(--gold); }
+  .ticket::before, .ticket::after { content: ""; position: absolute; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--ink); }
+  .ticket::before { left: -9px; } .ticket::after { right: -9px; }
+  .ticket strong { font-family: var(--display); font-weight: 600; font-size: 1.35rem; letter-spacing: .04em; white-space: nowrap; }
+  .ticket span { font-size: .9rem; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Realm workshop</h1>
+    <p>A test page for the Math Realm server. Run the steps in order. Students never see this page.</p>
+  </div>
+  <div class="status" id="status" data-state="unknown" role="status"><span class="dot" aria-hidden="true"></span><span>Not checked yet</span></div>
+</header>
+
+<main>
+  <section class="steps" aria-label="Tests">
+    <article class="step" id="step-ping">
+      <h2>Check the connection</h2>
+      <p>Asks the Apps Script web app whether it's running. The address comes from <code>js/config.js</code>.</p>
+      <p class="url" id="apiUrl"></p>
+      <div class="row"><button id="btnPing" type="button">Check connection</button></div>
+    </article>
+
+    <article class="step" id="step-login">
+      <h2>Log in as a student</h2>
+      <p>Setup created a test student with class code DEMO, student ID TEST1 and PIN 1234.</p>
+      <form id="loginForm" autocomplete="off">
+        <div class="fields">
+          <label>Class code <input name="classCode" value="DEMO" required></label>
+          <label>Student ID <input name="studentId" value="TEST1" required></label>
+          <label>PIN <input name="pin" value="1234" inputmode="numeric"></label>
+        </div>
+        <div class="row">
+          <button type="submit">Log in</button>
+          <button type="button" class="quiet" id="btnLogout">Log out</button>
+        </div>
+      </form>
+      <div class="progress" id="progress" hidden></div>
+    </article>
+
+    <article class="step" id="step-round">
+      <h2>Send a practice round</h2>
+      <p>Sends made-up answers the same way a game will. Afterward, look at the Attempts, Sessions, Mastery and PointsLog tabs in the Sheet.</p>
+      <label>Skill <select id="skill" disabled></select></label>
+      <div class="row">
+        <button type="button" data-kind="perfect" disabled>Perfect round</button>
+        <button type="button" data-kind="mistakes" class="quiet" disabled>Round with mistakes</button>
+        <button type="button" data-kind="hints" class="quiet" disabled>Round with hints</button>
+      </div>
+      <div class="row"><button type="button" id="btnResend" class="quiet" disabled>Resend the last round</button></div>
+      <p class="hint">Resending should be recognized as a repeat, with no points added. To see a golden ticket, change a milestone skill's daysNeeded to 1 on the Skills tab, choose Math Realm ▸ Apply Settings and Skills changes now, then send a perfect round on that skill.</p>
+    </article>
+
+    <article class="step" id="step-save">
+      <h2>Save and load game data</h2>
+      <p>Saves a sample flashcard progress file for the test student, then reads it back to make sure it matches.</p>
+      <div class="row"><button type="button" id="btnSave" disabled>Save, then load</button></div>
+    </article>
+  </section>
+
+  <section class="log-panel" aria-label="Server replies">
+    <div class="log-head"><h2>Server replies</h2><button type="button" id="btnClear">Clear</button></div>
+    <p class="empty" id="logEmpty">Replies from the server show up here, newest first.</p>
+    <ol class="log" id="log" aria-live="polite"></ol>
+  </section>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const STATUS = { mastered: 'Mastered', practicing: 'Practicing', learning: 'Learning' };
+  let lastRound = null;
+
+  const url = String((window.MATH_REALM_CONFIG || {}).apiUrl || '').trim();
+  $('#apiUrl').textContent = /\/exec$/.test(url) ? url : 'No web app address yet. Paste it into js/config.js.';
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function setStatus(state, text) {
+    $('#status').dataset.state = state;
+    $('#status').lastElementChild.textContent = text;
+  }
+  function markStep(id, ok) { $(id).dataset.done = ok ? 'true' : 'false'; }
+
+  function addLog(action, data, ms, summary) {
+    $('#logEmpty').hidden = true;
+    const li = el('li', 'entry');
+    li.dataset.ok = String(!!data.ok);
+    const head = el('div', 'head');
+    head.append(el('span', 'badge', data.ok ? 'OK' : 'Failed'), el('code', 'act', action), el('span', 'time', ms + ' ms'));
+    li.append(head, el('p', 'sum', summary || (data.ok ? 'Done.' : MathRealm.errorMessage(data.error))));
+    if (data.ticket) {
+      const t = el('div', 'ticket');
+      t.append(el('strong', '', data.ticket.code), el('span', '', 'Golden ticket for ' + data.ticket.skillName + '. It is also on the Tickets tab.'));
+      li.append(t);
+    }
+    const det = el('details');
+    det.append(el('summary', '', 'Full reply'), el('pre', '', JSON.stringify(data, null, 2)));
+    li.append(det);
+    $('#log').prepend(li);
+  }
+
+  async function run(button, action, fn, summarize) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    const t = performance.now();
+    let data;
+    try { data = await fn(); } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+    }
+    addLog(action, data, Math.round(performance.now() - t), data.ok && summarize ? summarize(data) : null);
+    return data;
+  }
+
+  function renderSession() {
+    const s = MathRealm.session;
+    const on = MathRealm.isLoggedIn();
+    document.querySelectorAll('[data-kind], #skill, #btnSave').forEach(b => { b.disabled = !on; });
+    $('#btnResend').disabled = !on || !lastRound;
+    const box = $('#progress');
+    box.hidden = !on;
+    if (!on) return;
+
+    const sel = $('#skill');
+    const keep = sel.value;
+    sel.replaceChildren(...s.skills.map(k => {
+      const o = el('option', '', k.zone + ': ' + k.name);
+      o.value = k.skillId;
+      return o;
+    }));
+    if (keep) sel.value = keep;
+
+    box.replaceChildren();
+    box.append(el('h3', '', s.student.displayName + ' has ' + s.student.points + ' points (' + s.student.lifetimePoints + ' earned all-time)'));
+    const wrap = el('div', 'table-wrap');
+    const table = el('table');
+    const thead = el('thead'); const hr = el('tr');
+    ['Skill', 'Status', 'Days', 'Ticket'].forEach(h => hr.append(el('th', '', h)));
+    thead.append(hr);
+    const tbody = el('tbody');
+    s.skills.forEach(k => {
+      const m = s.mastery[k.skillId];
+      const tr = el('tr');
+      const st = el('td', 'st', m ? (STATUS[m.status] || m.status) : 'Not started');
+      st.dataset.s = m ? m.status : '';
+      tr.append(el('td', '', k.name), st, el('td', '', (m ? m.days : 0) + ' of ' + k.daysNeeded), el('td', '', k.milestone ? 'Yes' : ''));
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    wrap.append(table);
+    box.append(wrap);
+  }
+
+  // Made-up answers for testing. Division skills get division prompts; Unit 6 gets 2-digit numbers.
+  function fakeAttempts(skillId, kind, n) {
+    const big = skillId.indexOf('g4') === 0;
+    const div = skillId.indexOf('div') >= 0;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = big ? 11 + Math.floor(Math.random() * 89) : 1 + Math.floor(Math.random() * 12);
+      const b = big ? 11 + Math.floor(Math.random() * 89) : 1 + Math.floor(Math.random() * 12);
+      const right = div ? b : a * b;
+      let correct = true, hintUsed = false, ms = 2500;
+      if (kind === 'mistakes') { correct = i % 3 !== 2; ms = 3000 + Math.round(Math.random() * 3000); }
+      if (kind === 'hints') { hintUsed = true; ms = 6000; }
+      out.push({ prompt: div ? (a * b) + ' ÷ ' + a : a + ' × ' + b, answer: String(correct ? right : right + 1), correct: correct, hintUsed: hintUsed, ms: ms });
+    }
+    return out;
+  }
+
+  function summarizeRound(d) {
+    const r = d.round, p = d.points, m = d.mastery;
+    let s = '+' + p.total + ' points, balance ' + p.balance + '. ';
+    s += r.independentCorrect + ' of ' + r.items + ' right without hints (' + Math.round(r.accuracy * 100) + '%)';
+    if (r.medianMs) s += ', typical answer time ' + (r.medianMs / 1000).toFixed(1) + ' s';
+    s += '. ' + (r.qualifies ? 'Counts toward mastery today.' : 'Did not meet the mastery bar.');
+    s += ' ' + (STATUS[m.status] || m.status) + ', ' + m.days + ' of ' + m.daysNeeded + ' days.';
+    if (p.reducedForMastered) s += ' Points were reduced because this skill is already mastered.';
+    return s;
+  }
+
+  $('#btnPing').addEventListener('click', async e => {
+    const d = await run(e.currentTarget, 'ping', () => MathRealm.ping(), d => 'Connected to server version ' + d.version + '.');
+    setStatus(d.ok ? 'ok' : 'fail', d.ok ? 'Connected' : 'Not connected');
+    markStep('#step-ping', d.ok);
+  });
+
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const d = await run(f.querySelector('[type=submit]'), 'login',
+      () => MathRealm.login(f.classCode.value, f.studentId.value, f.pin.value),
+      d => 'Logged in as ' + d.student.displayName + ' with ' + d.student.points + ' points. ' + d.skills.length + ' skills loaded from the Skills tab.');
+    if (d.ok) setStatus('ok', 'Connected');
+    markStep('#step-login', d.ok);
+    renderSession();
+  });
+
+  $('#btnLogout').addEventListener('click', async e => {
+    await run(e.currentTarget, 'logout', () => MathRealm.logout(), () => 'Logged out.');
+    lastRound = null;
+    renderSession();
+  });
+
+  document.querySelectorAll('[data-kind]').forEach(btn => btn.addEventListener('click', async () => {
+    const skillId = $('#skill').value;
+    const skill = MathRealm.session.skills.find(k => k.skillId === skillId);
+    const attempts = fakeAttempts(skillId, btn.dataset.kind, Math.max(skill.minItems, 10));
+    const roundId = MathRealm.newId();
+    const d = await run(btn, 'submitRound', () => MathRealm.submitRound('workshop-test', skillId, attempts, roundId), summarizeRound);
+    if (d.ok) lastRound = { skillId: skillId, attempts: attempts, roundId: roundId };
+    markStep('#step-round', d.ok);
+    renderSession();
+  }));
+
+  $('#btnResend').addEventListener('click', async e => {
+    if (!lastRound) return;
+    const r = lastRound;
+    const d = await run(e.currentTarget, 'submitRound (resend)',
+      () => MathRealm.submitRound('workshop-test', r.skillId, r.attempts, r.roundId),
+      d => d.duplicate ? 'Recognized as a repeat. No points were added.' : 'Warning: this was counted as a new round.');
+    markStep('#step-round', d.ok && d.duplicate);
+    renderSession();
+  });
+
+  $('#btnSave').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    const sample = { version: 1, savedAt: new Date().toISOString(), boxes: { '7x8': 2, '6x9': 1, '12x12': 3 } };
+    const s = await run(btn, 'saveState', () => MathRealm.saveState('workshop-test', sample), () => 'Saved sample game data to the SaveData tab.');
+    let ok = s.ok;
+    if (s.ok) {
+      const same = d => JSON.stringify(d.state) === JSON.stringify(sample);
+      const l = await run(btn, 'loadState', () => MathRealm.loadState('workshop-test'),
+        d => same(d) ? 'Loaded it back, and it matches what was saved.' : 'Loaded it back, but it does not match what was saved.');
+      ok = l.ok && same(l);
+    }
+    markStep('#step-save', ok);
+  });
+
+  $('#btnClear').addEventListener('click', () => { $('#log').replaceChildren(); $('#logEmpty').hidden = false; });
+
+  renderSession();
+})();
+</script>
+</body>
+</html>
