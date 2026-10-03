@@ -1,0 +1,194 @@
+/*
+ * Math Realm: shared look for every student page.
+ * Load the fonts in each page's <head>:
+ *   <link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+ */
+:root {
+  --night: #241A4A;
+  --dusk: #45307A;
+  --plum: #6E3F8F;
+  --violet: #6C4FB3;
+  --card: #FFFDFE;
+  --card-edge: #E9DFFB;
+  --ink: #2A1F45;
+  --ink-soft: #5F5480;
+  --haze: #E6DCFF;          /* light text on the night sky */
+  --bubblegum: #FF7EB6;
+  --berry: #D2448A;
+  --berry-deep: #A8306C;
+  --mint: #4FD1AB;
+  --mint-deep: #1E8466;
+  --lemon: #FFD84D;
+  --gold: #E8A90C;
+  --sky: #7CC8FF;
+  --sky-deep: #2D76B5;
+  --coral: #E0524F;
+
+  --display: 'Grandstander', 'Trebuchet MS', system-ui, sans-serif;
+  --body: 'Lexend', 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-lg: 26px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; background: var(--plum); }  /* shows when a page is pulled past its end */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #fff;
+  font: 400 17px/1.55 var(--body);
+  background: linear-gradient(180deg, var(--night) 0%, var(--dusk) 62%, var(--plum) 100%) fixed;
+}
+/* Star field */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .7;
+  background-image:
+    radial-gradient(1.8px 1.8px at 22px 34px, #fff 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 140px 82px, #FFE9A8 50%, transparent 52%),
+    radial-gradient(1px 1px at 92px 168px, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 228px 126px, #fff 50%, transparent 52%),
+    radial-gradient(1px 1px at 266px 18px, #CFE8FF 50%, transparent 52%),
+    radial-gradient(1.4px 1.4px at 186px 202px, #FFD6EA 50%, transparent 52%);
+  background-size: 300px 230px;
+}
+body.twinkle::before { animation: twinkle 4.5s ease-in-out infinite alternate; }
+@keyframes twinkle { from { opacity: .35; } to { opacity: .9; } }
+
+.page { position: relative; z-index: 1; }
+
+h1, h2, h3 { font-family: var(--display); font-weight: 800; line-height: 1.1; margin: 0; }
+p { max-width: 62ch; }
+
+.card {
+  background: var(--card);
+  color: var(--ink);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 0 rgba(16, 8, 46, .35);
+}
+
+/* Buttons: chunky and pressable */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 600 1.05rem/1.2 var(--body);
+  text-decoration: none;
+  color: #fff;
+  background: var(--berry);
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 12px 22px;
+  box-shadow: 0 5px 0 var(--berry-deep);
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--berry-deep); }
+.btn:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: 0 5px 0 var(--berry-deep); }
+.btn-soft { color: var(--berry); background: #fff; box-shadow: 0 5px 0 var(--card-edge); }
+.btn-soft:active { box-shadow: 0 1px 0 var(--card-edge); }
+.btn-small { font-size: .95rem; padding: 8px 16px; border-radius: 12px; box-shadow: 0 4px 0 var(--berry-deep); }
+.btn-small:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--berry-deep); }
+.btn-soft.btn-small { box-shadow: 0 4px 0 var(--card-edge); }
+.btn-big { width: 100%; padding: 16px 22px; font-size: 1.25rem; }
+
+:focus-visible { outline: 4px solid var(--lemon); outline-offset: 3px; }
+
+/* Form fields */
+.field { display: block; margin-bottom: 16px; }
+.field span { display: block; font-weight: 600; margin-bottom: 6px; }
+.field input {
+  width: 100%;
+  font: 400 1.2rem/1.3 var(--body);
+  color: var(--ink);
+  background: #fff;
+  border: 3px solid var(--card-edge);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+.field input:focus { border-color: var(--violet); outline: none; }
+.field input:focus-visible { outline: 4px solid var(--lemon); outline-offset: 2px; }
+
+.form-error {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: #FFE7E6;
+  color: #9E2A27;
+  font-weight: 600;
+}
+
+/* Stars: one per day toward mastery */
+.stars { display: inline-flex; gap: 3px; }
+.star { width: 28px; height: 28px; display: block; }
+.star path { fill: #EEE8F8; stroke: #CDBFEA; stroke-width: 1.5; stroke-linejoin: round; }
+.star.on path { fill: var(--lemon); stroke: var(--gold); }
+.stars.mastered .star path { fill: var(--gold); stroke: #B9810A; }
+.stars.pop .star.on { animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: calc(var(--i, 0) * 90ms + 150ms); }
+@keyframes pop { from { transform: scale(.2) rotate(-30deg); } to { transform: none; } }
+
+/* Golden ticket stub */
+.ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  padding: 14px 26px;
+  color: var(--ink);
+  background: linear-gradient(135deg, #FFF3C4, #FFE07A);
+  border: 3px solid var(--gold);
+  border-radius: 14px;
+}
+.ticket::before, .ticket::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--dusk);
+}
+.ticket::before { left: -11px; }
+.ticket::after { right: -11px; }
+.ticket strong { font-family: var(--display); font-weight: 800; font-size: 1.6rem; letter-spacing: .05em; white-space: nowrap; }
+.ticket span { font-size: .9rem; color: var(--ink-soft); }
+.ticket.used { filter: grayscale(.85); opacity: .65; }
+
+/* A yellow note across the top of a page */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--lemon);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
