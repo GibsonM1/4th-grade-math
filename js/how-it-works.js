@@ -24,7 +24,7 @@
   /* ── Building the steps ── */
 
   function build() {
-    problem = A.make(kind, nums);
+    problem = A.make(kind, nums, { totalMode: 'guided' });
     $('#title').textContent = problem.text;
     $('#work').replaceChildren();
     $('#extra').replaceChildren();
@@ -87,6 +87,16 @@
           ? x + ' × ' + y + ' = ' + x * y + '.'
           : 'Multiply the front digits, ' + a.front + ' × ' + c.front + ' = ' + a.front * c.front + ', then add ' + (z === 1 ? 'the zero' : 'the ' + z + ' zeros') + ': ' + fmt(x * y) + '.';
         say((b.label ? 'Partial product: ' : 'This part of the rectangle is ') + fmt(x) + ' × ' + fmt(y) + '. ' + how, () => finishBox(b));
+      } else if (b.type === 'colsum') {
+        const c = b.colData, i = b.col, last = !p.boxes.some(x => x.type === 'colsum' && x.col > i);
+        const parts = c.digits.join(' + ') + (c.carryIn ? (c.digits.length ? ' + ' : '') + c.carryIn + ' carried' : '');
+        const tail = c.carryOut
+          ? c.sum + ' ' + A.PLACE[i] + ' is ' + c.carryOut + ' ' + (c.carryOut === 1 ? ['ten', 'hundred', 'thousand', 'ten thousand'][i] : A.PLACE[i + 1]) +
+            ' and ' + c.write + ' ' + A.PLACE[i] + ', so write the ' + c.write + ' and carry the ' + c.carryOut + ' to the top of the ' + A.PLACE[i + 1] + ' column.'
+          : 'Write ' + c.write + '.';
+        say((i === 0 ? 'Now add the partial products. They are lined up by place value, so add one column at a time, starting with the ones. ' : '') +
+            cap(A.PLACE[i]) + ': ' + parts + ' = ' + c.sum + '. ' + tail, () => finishBox(b));
+        if (last) say('So ' + p.text + ' = ' + fmt(p.total) + '.');
       } else if (b.type === 'total') {
         const total = b.answer, digits = String(total);
         A.columnSteps(b.list, total).forEach((c, i, all) => {
@@ -115,7 +125,7 @@
       const ones = n % 10;
       say('For grown-ups: the standard method writes ' + fmt(p.total) + ' in a single row and carries as it goes. Each carried digit is part of a partial product moving into the next place. ' +
           'For example, ' + ones + ' × ' + m + ' = ' + ones * m + (ones * m >= 10 ? ': the ' + (ones * m % 10) + ' stays in the ones and the ' + Math.floor(ones * m / 10) + ' ten is carried. ' : '. ') +
-          'The area model shows every one of those pieces separately (' + p.boxes.find(x => x.type === 'total').list.map(fmt).join(' + ') + '), which is why students learn it first.',
+          'The area model shows every one of those pieces separately (' + p.boxes.find(x => x.list).list.map(fmt).join(' + ') + '), which is why students learn it first.',
           () => $('#extra').replaceChildren(standard(A.stackView([n, m], p.total, ['', '×']))), true);
     } else {
       const ones = m % 10, tens = m - ones;
