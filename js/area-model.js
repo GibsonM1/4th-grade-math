@@ -19,14 +19,13 @@
   const C = window.MATH_REALM_CATALOG;
   const $ = s => document.querySelector(s);
   const STAR_PATH = 'M14 2.8l3.4 7 7.7 1-5.6 5.3 1.4 7.6L14 19.9l-6.9 3.8 1.4-7.6-5.6-5.3 7.7-1z';
-  const PLACE = ['ones', 'tens', 'hundreds', 'thousands'];
   const PRAISE = ['You got it!', 'Nice work!', 'Great building!', 'Super!', 'Yes!'];
   const KINDS = { 'g4.u6.tens': 'tens', 'g4.u6.area1': 'area1', 'g4.u6.area2': 'area2', 'g4.u6.partial2': 'partial2' };
   const HOW = {
     tens: 'Multiply numbers that end in zero. Tip: multiply the front digits, then count the zeros and put them on the end.',
-    area1: 'Split the big number by place value along the top of the rectangle. Find the area of each part, then add the parts.',
-    area2: 'Split both numbers by place value. Find the area of all four parts of the rectangle, then add them up.',
-    partial2: 'Find the four partial products, then add them. No rectangle this time, but you can still picture it!',
+    area1: 'Write the big number in expanded form along the top of the rectangle (482 = 400 + 80 + 2). Find the area of each part. Then add the parts, lined up by place value.',
+    area2: 'Write both numbers in expanded form along the edges of the rectangle (34 = 30 + 4). Find the area of all four parts, then add them, lined up by place value.',
+    partial2: 'Find the four partial products and add them, lined up by place value. No rectangle this time, but you can still picture it!',
   };
 
   const session = MathRealm.session;
@@ -103,7 +102,10 @@
 
   /* ── Math pieces ── */
 
-  // 263 → [200, 60, 3]
+  const PLACE = ['ones', 'tens', 'hundreds', 'thousands', 'ten thousands'];
+  const PLACE_SHORT = ['O', 'T', 'H', 'Th', 'TTh'];
+
+  // 482 → [400, 80, 2]  (expanded form)
   function placeParts(n) {
     const s = String(n), out = [];
     for (let i = 0; i < s.length; i++) {
@@ -118,6 +120,7 @@
     while (x > 0 && x % 10 === 0) { x /= 10; z++; }
     return { front: x, zeros: z };
   }
+  const placeOf = v => PLACE[frontZeros(v).zeros];
   const zeroWords = z => z === 1 ? 'one zero' : z === 2 ? 'two zeros' : z === 3 ? 'three zeros' : z + ' zeros';
 
   function productHelp(x, y, reveal) {
@@ -134,14 +137,13 @@
     const fz = frontZeros(value);
     const line = 'In ' + fmt(n) + ', the ' + fz.front + ' is in the ' + PLACE[fz.zeros] + ' place.';
     return reveal
-      ? [line + ' It is worth ' + fmt(value) + '.', fmt(n) + ' = ' + placeParts(n).map(fmt).join(' + ')]
-      : [line + ' What is it worth?'];
+      ? [line + ' It is worth ' + fmt(value) + '.', 'In expanded form, ' + fmt(n) + ' = ' + placeParts(n).map(fmt).join(' + ') + '.']
+      : ['Expanded form writes a number as what each digit is worth.', line + ' What is it worth?'];
   }
   function addHelp(list, total, reveal) {
-    const sum = list.map(fmt).join(' + ');
     return reveal
-      ? ['Add the parts: ' + sum + ' = ' + fmt(total) + '.']
-      : ['Add the parts: ' + sum + '. Try adding the biggest ones first, then the smaller ones.'];
+      ? ['Add the partial products: ' + list.map(fmt).join(' + ') + ' = ' + fmt(total) + '.']
+      : ['Add one place at a time, starting with the ones column on the right.', 'If a column adds up to 10 or more, regroup: carry the extra ten to the next place.'];
   }
 
   // Blocks picture for the tens skill: 30 × 20 is 3 × 2 blocks of 100.
@@ -182,7 +184,7 @@
     let x = rnd(2, 9) * 10, y = rnd(2, 9);
     if (Math.random() < 0.4) y *= 10;
     if (Math.random() < 0.5) { const t = x; x = y; y = t; }
-    const p = { text: x + ' × ' + y, total: x * y, hideTitle: true, boxes: [] };
+    const p = { text: x + ' × ' + y, total: x * y, boxes: [] };
     const unit = Math.pow(10, frontZeros(x).zeros + frontZeros(y).zeros);
     const blockLine = unit === 100 ? 'In the picture, each block is 10 × 10 = 100.' : unit === 10 ? 'In the picture, each block is 10 × 1 = 10.' : null;
     p.boxes.push({
@@ -207,10 +209,10 @@
     for (let i = 1; i < len; i++) n = n * 10 + rnd(1, 9);
     const m = rnd(2, 9);
     const tops = placeParts(n);
-    const p = { text: fmt(n) + ' × ' + m, total: n * m, tops: tops, sides: [m], sideGiven: true, boxes: [] };
+    const p = { text: fmt(n) + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: [m], sideGiven: true, boxes: [] };
     tops.forEach((t, i) => p.boxes.push({
       type: 'top', i: i, answer: t,
-      step: i === 0 ? 'Split ' + fmt(n) + ' by place value along the top. Start with the biggest place.' : 'Keep splitting ' + fmt(n) + '.',
+      step: i === 0 ? 'Write ' + fmt(n) + ' in expanded form along the top. Start with the ' + placeOf(t) + '.' : 'Keep going: the ' + placeOf(t) + '.',
       help: rv => splitHelp(n, t, rv),
     }));
     tops.forEach((t, i) => p.boxes.push({
@@ -218,29 +220,29 @@
       step: 'Find the area of each part of the rectangle.',
       help: rv => productHelp(t, m, rv),
     }));
-    p.boxes.push({ type: 'total', answer: n * m, step: 'Add the parts to find the area of the whole rectangle.', help: rv => addHelp(tops.map(t => t * m), n * m, rv) });
-    p.render = work => renderArea(work, p);
+    p.boxes.push({ type: 'total', answer: n * m, step: 'Add the partial products. They are lined up by place value, so add one column at a time.', help: rv => addHelp(tops.map(t => t * m), n * m, rv) });
+    p.render = work => renderWithDiagram(work, p);
     return p;
   }
 
-  function twoByTwoProblem(stacked) {
+  function twoByTwoProblem(noDiagram) {
     let n, m;
     do {
       n = rnd(1, 9) * 10 + rnd(1, 9);
       m = rnd(1, 9) * 10 + rnd(1, 9);
     } while (n < 20 && m < 20);
     const tops = placeParts(n), sides = placeParts(m);
-    const p = { text: n + ' × ' + m, total: n * m, tops: tops, sides: sides, boxes: [] };
+    const p = { text: n + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: sides, boxes: [] };
 
-    if (!stacked) {
+    if (!noDiagram) {
       tops.forEach((t, i) => p.boxes.push({
         type: 'top', i: i, answer: t,
-        step: i === 0 ? 'Split ' + n + ' into tens and ones along the top.' : 'Now the ones in ' + n + '.',
+        step: i === 0 ? 'Write ' + n + ' in expanded form along the top. Start with the tens.' : 'Now the ones in ' + n + '.',
         help: rv => splitHelp(n, t, rv),
       }));
       sides.forEach((s, i) => p.boxes.push({
         type: 'side', i: i, answer: s,
-        step: i === 0 ? 'Split ' + m + ' along the side.' : 'Now the ones in ' + m + '.',
+        step: i === 0 ? 'Now write ' + m + ' in expanded form along the side. Start with the tens.' : 'Now the ones in ' + m + '.',
         help: rv => splitHelp(m, s, rv),
       }));
       sides.forEach((s, r) => tops.forEach((t, c) => p.boxes.push({
@@ -248,33 +250,116 @@
         step: 'Find the area of each of the four parts.',
         help: rv => productHelp(t, s, rv),
       })));
-      p.boxes.push({ type: 'total', answer: n * m, step: 'Add the four parts to find the area of the whole rectangle.', help: rv => addHelp(sides.flatMap(s => tops.map(t => s * t)), n * m, rv) });
-      p.render = work => renderArea(work, p);
+      p.boxes.push({ type: 'total', answer: n * m, step: 'Add the four partial products. They are lined up by place value, so add one column at a time.', help: rv => addHelp(sides.flatMap(s => tops.map(t => s * t)), n * m, rv) });
+      p.render = work => renderWithDiagram(work, p);
     } else {
       // Same order as the written method: ones × ones first, tens × tens last.
       const order = [];
       sides.slice().reverse().forEach(s => tops.slice().reverse().forEach(t => order.push([t, s])));
       order.forEach(([t, s]) => p.boxes.push({
-        type: 'part', label: t + ' × ' + s, answer: t * s,
-        step: 'Find each partial product.',
+        type: 'part', label: t + ' × ' + s, answer: t * s, editable: true,
+        step: 'Find each partial product. Line the digits up with their place.',
         help: rv => productHelp(t, s, rv),
       }));
-      p.boxes.push({ type: 'total', answer: n * m, step: 'Add the partial products.', help: rv => addHelp(order.map(([t, s]) => t * s), n * m, rv) });
-      p.render = work => renderStack(work, p, n, m);
+      p.boxes.push({ type: 'total', answer: n * m, step: 'Add the partial products, one column at a time.', help: rv => addHelp(order.map(([t, s]) => t * s), n * m, rv) });
+      p.render = work => {
+        const solo = el('div', 'solo');
+        solo.append(renderPaper(p, true));
+        work.append(solo);
+      };
     }
     return p;
   }
 
   /* ── Drawing ── */
 
+  // A row of digits lined up in place-value columns. If editable, a real input sits on top
+  // and whatever the student types fills in from the right, so the ones always line up.
+  function digitRow(cols, value, editable, label) {
+    const row = el('div', 'drow' + (editable ? ' edit waiting' : ''));
+    row.style.gridColumn = '2 / span ' + cols;
+    row.style.gridTemplateColumns = 'repeat(' + cols + ', var(--cell))';
+    const cells = [];
+    for (let i = 0; i < cols; i++) { const c = el('span', 'cell'); cells.push(c); row.append(c); }
+    const paint = text => {
+      const digits = String(text == null ? '' : text).replace(/[^0-9?]/g, '').slice(-cols);
+      cells.forEach((c, i) => {
+        const k = i - (cols - digits.length);
+        c.textContent = k >= 0 ? digits[k] : '';
+        c.classList.toggle('q', digits[k] === '?');
+      });
+    };
+    paint(value);
+    if (!editable) return { row: row, paint: paint };
+    const input = el('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.maxLength = cols;
+    input.disabled = true;
+    input.setAttribute('aria-label', label);
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/[^0-9]/g, '').slice(0, cols);
+      paint(input.value);
+    });
+    row.append(input);
+    return { row: row, input: input, paint: paint };
+  }
+
+  // The "paper" column: the problem written vertically, then the partial products and
+  // their sum, all lined up by place value with column labels on top.
+  function renderPaper(p, withNotes) {
+    const cols = String(p.total).length;
+    const paper = el('div', 'paper' + (withNotes ? ' notes' : ''));
+    paper.style.gridTemplateColumns = 'var(--op) repeat(' + cols + ', var(--cell))' + (withNotes ? ' auto' : '');
+    const line = () => { const r = el('div', 'rule'); r.style.gridColumn = '1 / span ' + (cols + 1); paper.append(r); if (withNotes) paper.append(el('span')); };
+    const row = (op, rowEl, note) => { paper.append(el('span', 'op', op || '')); paper.append(rowEl); if (withNotes) paper.append(el('span', 'note', note || '')); };
+
+    // column labels
+    paper.append(el('span'));
+    for (let i = cols - 1; i >= 0; i--) {
+      const h = el('span', 'head', PLACE_SHORT[i]);
+      h.title = PLACE[i];
+      paper.append(h);
+    }
+    if (withNotes) paper.append(el('span'));
+
+    row('', digitRow(cols, p.n).row);
+    row('×', digitRow(cols, p.m).row);
+    line();
+    const parts = p.boxes.filter(b => b.type === 'part');
+    p.paperRows = [];
+    parts.forEach((b, i) => {
+      const d = digitRow(cols, b.editable ? '' : '?', !!b.editable, 'Partial product ' + b.label);
+      if (b.editable) { b.input = d.input; b.host = d.row; b.digits = true; b.paint = d.paint; }
+      else p.paperRows.push({ box: b, paint: d.paint });
+      row(i === parts.length - 1 ? '+' : '', d.row, b.label);
+    });
+    line();
+    const total = p.boxes.find(b => b.type === 'total');
+    const t = digitRow(cols, '', true, 'Total');
+    total.input = t.input; total.host = t.row; total.digits = true; total.paint = t.paint;
+    row('', t.row, withNotes ? 'add them up' : '');
+
+    const wrap = el('div', 'paper-wrap');
+    wrap.append(paper);
+    const used = [];
+    for (let i = cols - 1; i >= 0; i--) used.push(PLACE_SHORT[i] + ' = ' + PLACE[i]);
+    wrap.append(el('p', 'key', used.join(', ')));
+    return wrap;
+  }
+
   // Bigger places get more room, so 30 looks bigger than 4 (the diagram is not to scale).
   const weight = v => String(v).length;
 
-  function renderArea(work, p) {
+  function renderWithDiagram(work, p) {
+    const split = el('div', 'split');
+    split.append(renderPaper(p, false));
+
     const wrap = el('div', 'area-wrap');
     const grid = el('div', 'area');
     const k = window.innerWidth < 640 ? 0.68 : 1;   // narrower columns on small screens
-    grid.style.gridTemplateColumns = 'auto ' + p.tops.map(t => Math.round(k * (92 + 34 * weight(t))) + 'px').join(' ');
+    grid.style.gridTemplateColumns = 'auto ' + p.tops.map(t => Math.round(k * (80 + 30 * weight(t))) + 'px').join(' ');
     grid.style.gridTemplateRows = 'auto ' + p.sides.map(s => Math.max(p.sides.length === 1 ? 124 : 0, 66 + 28 * weight(s)) + 'px').join(' ');
     const byType = (type, i) => p.boxes.find(b => b.type === type && b.i === i);
 
@@ -282,17 +367,18 @@
     p.tops.forEach((t, i) => {
       const cell = el('div', 'edge top');
       const b = byType('top', i);
-      b.input = numInput('Top part ' + (i + 1));
-      cell.append(b.input);
+      b.input = numInput(placeOf(t) + ' part of ' + p.n);
+      cell.append(el('span', 'place', placeOf(t)), b.input);
       grid.append(cell);
     });
     p.regions = [];
     p.sides.forEach((s, r) => {
       const left = el('div', 'edge left');
+      left.append(el('span', 'place', placeOf(s)));
       if (p.sideGiven) left.append(el('span', 'given', String(s)));
       else {
         const b = byType('side', r);
-        b.input = numInput('Side part ' + (r + 1));
+        b.input = numInput(placeOf(s) + ' part of ' + p.m);
         left.append(b.input);
       }
       grid.append(left);
@@ -307,22 +393,8 @@
       });
     });
     wrap.append(grid);
-    work.append(wrap);
-
-    // The adding line under the rectangle
-    const sum = el('div', 'sum');
-    const partBoxes = p.boxes.filter(b => b.type === 'part');
-    p.sumParts = partBoxes.map((b, i) => {
-      if (i) sum.append(el('span', '', '+'));
-      const s = el('span', 'part wait', '?');
-      sum.append(s);
-      return { box: b, el: s };
-    });
-    sum.append(el('span', '', '='));
-    const total = p.boxes.find(b => b.type === 'total');
-    total.input = numInput('Total');
-    sum.append(total.input);
-    work.append(sum);
+    split.append(wrap);
+    work.append(split);
 
     p.update = () => {
       p.regions.forEach(g => {
@@ -330,24 +402,9 @@
         const sideDone = p.sideGiven || byType('side', g.r).done;
         g.expr.textContent = topDone && sideDone ? fmt(g.t) + ' × ' + fmt(g.s) : '';
       });
-      p.sumParts.forEach(sp => {
-        sp.el.textContent = sp.box.done ? fmt(sp.box.answer) : '?';
-        sp.el.classList.toggle('wait', !sp.box.done);
-      });
+      // Each finished part drops into the vertical addition on the left.
+      p.paperRows.forEach(pr => pr.paint(pr.box.done ? String(pr.box.answer) : '?'));
     };
-  }
-
-  function renderStack(work, p, n, m) {
-    const st = el('div', 'stack');
-    st.append(el('span', 'n', String(n)), el('span'));
-    st.append(el('span', 'n', '× ' + m), el('span'));
-    st.append(el('div', 'rule'), el('span'));
-    p.boxes.forEach(b => {
-      b.input = numInput(b.type === 'total' ? 'Total' : b.label);
-      if (b.type === 'total') st.append(el('div', 'rule'), el('span'));
-      st.append(b.input, el('span', 'note', b.type === 'total' ? 'add them up' : b.label));
-    });
-    work.append(st);
   }
 
   /* ── Intro ── */
@@ -381,8 +438,9 @@
     if (count >= ROUND_SIZE) { finishRound(); return; }
     count++;
     problem = makeProblem();
-    $('#title').textContent = problem.text;
-    $('#title').hidden = !!problem.hideTitle;
+    $('#title').textContent = problem.text;   // kept for screen readers; the problem is written out in the work area
+    $('#title').hidden = true;
+    $('#board').setAttribute('aria-label', problem.text);
     $('#board').dataset.state = '';
     $('#help').hidden = true;
     $('#hintBtn').hidden = false;
@@ -414,6 +472,7 @@
     tries = 0;
     $('#step').textContent = b.step;
     b.input.disabled = false;
+    hostOf(b).classList.remove('waiting');
     b.input.focus();
   }
 
@@ -427,15 +486,27 @@
     h.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
+  // A box is either a plain input or a place-value row (an input with digit cells).
+  function hostOf(b) { return b.host || b.input; }
+  function markBox(b, state) {
+    const h = hostOf(b);
+    h.classList.remove('ok', 'bad', 'shown');
+    void h.offsetWidth;   // restart the shake
+    if (state) h.classList.add(state);
+  }
+  function fillBox(b, v) {
+    b.input.value = b.digits ? String(v) : fmt(v);
+    if (b.paint) b.paint(b.input.value);
+  }
+
   function check() {
     if (mode !== 'solving') return;
     const b = problem.boxes[boxIdx];
     const typed = b.input.value.replace(/[^0-9]/g, '');
     if (!typed) return;
     if (Number(typed) === b.answer) {
-      b.input.value = fmt(b.answer);
-      b.input.classList.remove('bad');
-      b.input.classList.add('ok');
+      fillBox(b, b.answer);
+      markBox(b, 'ok');
       b.input.disabled = true;
       b.done = true;
       RealmFX.correct();
@@ -443,18 +514,15 @@
       return;
     }
     tries++;
-    b.input.classList.remove('bad');
-    void b.input.offsetWidth;
-    b.input.classList.add('bad');
+    markBox(b, 'bad');
     RealmFX.wrong();
     if (tries < 2) {
       showHelp(['Not quite. Try that box again.'], true);
       b.input.select();
     } else {
       revealed = true;
-      b.input.value = fmt(b.answer);
-      b.input.classList.remove('bad');
-      b.input.classList.add('shown');
+      fillBox(b, b.answer);
+      markBox(b, 'shown');
       b.input.disabled = true;
       b.done = true;
       showHelp(['Here is that one:'].concat(b.help(true)), true, b.picture ? b.picture() : null);
@@ -489,7 +557,7 @@
   });
   $('#nextBtn').addEventListener('click', nextProblem);
   $('#work').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.classList.contains('num')) { e.preventDefault(); check(); }
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); check(); }
   });
 
   /* ── Finishing ── */
