@@ -49,6 +49,12 @@
     state_too_large: 'This save file is too big to store.',
     busy:            'The server is busy. Try again in a moment.',
     server_error:    'Something went wrong on the server. Details are in Apps Script under Executions.',
+    not_enough_gems: 'Not enough gems for that yet.',
+    already_owned:   'That one is already yours.',
+    not_owned:       "That item isn't owned yet.",
+    unknown_item:    "That item isn't in the shop. It may have been turned off on the Shop tab.",
+    reserved:        'That save name is reserved for the server.',
+    bad_slot:        'Unknown equip slot.',
   };
   // Messages students see
   const STUDENT_MESSAGES = {
@@ -61,6 +67,10 @@
     unknown_skill:   "This game isn't set up yet. Tell your teacher.",
     busy:            'Lots of players right now! Try again in a moment.',
     server_error:    'Something went wrong. Tell your teacher.',
+    not_enough_gems: "You don't have enough gems for that yet. Keep playing to earn more!",
+    already_owned:   "That one is already yours!",
+    not_owned:       "You'll need to adopt that one first.",
+    unknown_item:    "That one isn't in the shop right now.",
   };
 
   function readSession() {
@@ -201,6 +211,7 @@
           token: data.token,
           who: { classCode: String(classCode).trim().toUpperCase(), studentId: String(studentId).trim() },
           student: data.student, skills: data.skills, mastery: data.mastery, tickets: data.tickets || [],
+          shop: data.shop || { owned: [], equipped: {} },
         };
         writeSession(session);
         flushPending();
@@ -218,7 +229,7 @@
     async refresh() {
       const data = await call('getProgress', {}, 2);
       if (data.ok && session) {
-        Object.assign(session, { student: data.student, skills: data.skills, mastery: data.mastery, tickets: data.tickets || [] });
+        Object.assign(session, { student: data.student, skills: data.skills, mastery: data.mastery, tickets: data.tickets || [], shop: data.shop || session.shop });
         writeSession(session);
       }
       return data;
@@ -264,6 +275,26 @@
     },
 
     saveState(gameId, state) { return call('saveState', { gameId: gameId, state: state }, 2); },
+
+    // Sprite Shop. Prices and ownership are checked on the server.
+    shop() { return call('shop', {}, 2); },
+    async buy(itemId) {
+      const data = await call('buy', { itemId: itemId }, 0);   // never retried, so nothing is bought twice
+      if (data.ok && session) {
+        session.student.points = data.balance;
+        session.shop = { owned: data.owned, equipped: data.equipped };
+        writeSession(session);
+      }
+      return data;
+    },
+    async equip(slot, itemId) {
+      const data = await call('equip', { slot: slot, itemId: itemId }, 1);
+      if (data.ok && session) {
+        session.shop = { owned: data.owned, equipped: data.equipped };
+        writeSession(session);
+      }
+      return data;
+    },
     loadState(gameId) { return call('loadState', { gameId: gameId }, 2); },
 
     // errorMessage(code) for adults; errorMessage(code, true) for students
