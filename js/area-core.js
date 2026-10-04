@@ -124,6 +124,69 @@
     return svg;
   }
 
+  /* ── Adding the partial products: three stages ──
+   * 'guided'  the student types each column's total (13); the game writes the 3,
+   *           carries the 1 into the box over the next column, and explains it.
+   * 'carry'   the student writes each answer digit and their own carries.
+   * 'whole'   the student types the whole sum, ones digit first.
+   */
+  const ONE = ['one', 'ten', 'hundred', 'thousand', 'ten thousand'];
+  const unit = (i, n) => (n === 1 ? ONE[i] : PLACE[i]);
+  const modeOf = opts => (opts && opts.totalMode) || 'whole';
+
+  function regroupLine(c, i) {
+    return c.sum + ' ' + PLACE[i] + ' = ' + c.carryOut + ' ' + unit(i + 1, c.carryOut) + ' and ' + c.write + ' ' + unit(i, c.write) + '. ';
+  }
+  function columnWords(c) {
+    const parts = c.digits.slice();
+    if (c.carryIn) parts.push(c.carryIn + ' carried');
+    return parts.length ? parts.join(' + ') : '0';
+  }
+
+  function addSum(p, list, wholeStep) {
+    const total = p.total;
+    if (p.mode === 'whole') {
+      p.boxes.push({ type: 'total', answer: total, list: list, step: wholeStep, help: rv => addHelp(list, total, rv) });
+      return;
+    }
+    const steps = columnSteps(list, total);
+    steps.forEach((c, i) => {
+      const place = PLACE[i], next = PLACE[i + 1];
+      const first = i === 0 ? 'Now add the partial products, one column at a time, starting with the ones. ' : '';
+      const withCarry = c.carryIn ? ', including the ' + c.carryIn + ' you carried' : '';
+      if (p.mode === 'guided') {
+        const before = i > 0 && steps[i - 1].carryOut ? regroupLine(steps[i - 1], i - 1) + 'The ' + steps[i - 1].carryOut + ' is carried. ' : '';
+        p.boxes.push({
+          type: 'colsum', col: i, answer: c.sum, carryOut: c.carryOut, write: c.write, colData: c, list: list,
+          retry: 'Not quite. Add every digit in the circled ' + place + ' column again' + (c.carryIn ? ', plus the carried ' + c.carryIn : '') + '.',
+          step: before + first + 'Add the ' + place + ' column (circled)' + withCarry + '. Type its total in the box under the problem.',
+          help: rv => rv
+            ? ['The ' + place + ' column: ' + columnWords(c) + ' = ' + c.sum + '.']
+            : ['Add the digits in the circled ' + place + ' column' + (c.carryIn ? ', and the carried ' + c.carryIn : '') + '. If the total is 10 or more, type both digits.'],
+        });
+      } else {
+        p.boxes.push({
+          type: 'digit', col: i, answer: c.write, colData: c, list: list, digits: true,
+          retry: 'Not quite. Add the ' + place + ' column again' + (c.carryIn ? ', and remember the carried ' + c.carryIn : '') + '. If it is 10 or more, write only the last digit.',
+          step: first + 'Add the ' + place + ' column (circled)' + withCarry + '. Write the last digit of its total in the answer row.',
+          help: rv => rv
+            ? ['The ' + place + ' column: ' + columnWords(c) + ' = ' + c.sum + '. Write the ' + c.write + (c.carryOut ? ' and carry the ' + c.carryOut + '.' : '.')]
+            : ['Add the digits in the circled ' + place + ' column' + (c.carryIn ? ', and the carried ' + c.carryIn : '') + '. If the total is 10 or more, write only its last digit here.'],
+        });
+        if (i < steps.length - 1) {
+          p.boxes.push({
+            type: 'carry', col: i, answer: c.carryOut, colData: c, allowEmpty: true, blankZero: true, digits: true,
+            retry: 'Not quite. Did the ' + place + ' column add up to 10 or more? If it did, its tens digit carries. If not, leave the box empty.',
+            step: 'Does anything carry to the ' + next + '? Type it in the small box at the top of the ' + next + ' column. If nothing carries, just press Enter.',
+            help: rv => rv
+              ? ['The ' + place + ' column added up to ' + c.sum + '. ' + (c.carryOut ? regroupLine(c, i) + 'Carry the ' + c.carryOut + '.' : "That's less than 10, so nothing carries. Leave the box empty.")]
+              : ['Did the ' + place + ' column add up to 10 or more? If it did, the tens digit of that total carries to the ' + next + ' column.'],
+          });
+        }
+      }
+    });
+  }
+
   /* ── Problems ── */
 
   function tensProblem(nums) {
@@ -152,7 +215,7 @@
     return p;
   }
 
-  function area1Problem(nums) {
+  function area1Problem(nums, opts) {
     let n, m;
     if (nums) { n = nums[0]; m = nums[1]; }
     else {
@@ -163,7 +226,7 @@
       m = rnd(2, 9);
     }
     const tops = placeParts(n);
-    const p = { kind: 'area1', text: fmt(n) + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: [m], sideGiven: true, boxes: [] };
+    const p = { kind: 'area1', text: fmt(n) + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: [m], sideGiven: true, boxes: [], mode: modeOf(opts) };
     tops.forEach((t, i) => p.boxes.push({
       type: 'top', i: i, answer: t,
       step: i === 0
@@ -177,16 +240,12 @@
       help: rv => productHelp(t, m, rv),
     }));
     const list = tops.map(t => t * m);
-    p.boxes.push({
-      type: 'total', answer: n * m, list: list,
-      step: 'Add the partial products to find ' + fmt(n) + ' × ' + m + '. Start with the ones column and type the ones digit first.',
-      help: rv => addHelp(list, n * m, rv),
-    });
+    addSum(p, list, 'Add the partial products to find ' + fmt(n) + ' × ' + m + '. Start with the ones column and type the ones digit first.');
     p.render = work => renderWithDiagram(work, p);
     return p;
   }
 
-  function twoByTwoProblem(noDiagram, nums) {
+  function twoByTwoProblem(noDiagram, nums, opts) {
     let n, m;
     if (nums) { n = nums[0]; m = nums[1]; }
     else {
@@ -196,7 +255,7 @@
       } while (n < 20 && m < 20);
     }
     const tops = placeParts(n), sides = placeParts(m);
-    const p = { kind: noDiagram ? 'partial2' : 'area2', text: n + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: sides, boxes: [] };
+    const p = { kind: noDiagram ? 'partial2' : 'area2', text: n + ' × ' + m, n: n, m: m, total: n * m, tops: tops, sides: sides, boxes: [], mode: modeOf(opts) };
 
     if (!noDiagram) {
       tops.forEach((t, i) => p.boxes.push({
@@ -215,11 +274,7 @@
         help: rv => productHelp(t, s, rv),
       })));
       const list = sides.flatMap(s => tops.map(t => s * t));
-      p.boxes.push({
-        type: 'total', answer: n * m, list: list,
-        step: 'Add the four partial products to find ' + n + ' × ' + m + '. Start with the ones column and type the ones digit first.',
-        help: rv => addHelp(list, n * m, rv),
-      });
+      addSum(p, list, 'Add the four partial products to find ' + n + ' × ' + m + '. Start with the ones column and type the ones digit first.');
       p.render = work => renderWithDiagram(work, p);
     } else {
       // Same order as the written method: ones × ones first, tens × tens last.
@@ -231,11 +286,7 @@
         help: rv => productHelp(t, s, rv),
       }));
       const list = order.map(([t, s]) => t * s);
-      p.boxes.push({
-        type: 'total', answer: n * m, list: list,
-        step: 'Add the partial products to find ' + n + ' × ' + m + '. Start with the ones column and type the ones digit first.',
-        help: rv => addHelp(list, n * m, rv),
-      });
+      addSum(p, list, 'Add the partial products to find ' + n + ' × ' + m + '. Start with the ones column and type the ones digit first.');
       p.render = work => {
         const solo = el('div', 'solo');
         solo.append(renderPaper(p, true));
@@ -352,12 +403,131 @@
       else p.paperRows.push({ box: b, paint: d.paint });
       rows.push({ op: i === parts.length - 1 ? '+' : '', el: d.row, note: b.label });
     });
+    if (p.mode === 'whole') {
+      rows.push({ rule: true });
+      const total = p.boxes.find(b => b.type === 'total');
+      const t = digitRow(cols, '', true, 'Total', true);
+      total.input = t.input; total.host = t.row; total.digits = true; total.paint = t.paint;
+      rows.push({ el: t.row, note: withNotes ? 'add them up' : '' });
+      return paperGrid(cols, rows, withNotes);
+    }
+
+    // Carry boxes sit just above the partial products, so they read as carries for the adding.
+    const carry = cellRow(cols, 'carryrow');
+    rows.splice(3, 0, { el: carry.row, note: '' });
     rows.push({ rule: true });
-    const total = p.boxes.find(b => b.type === 'total');
-    const t = digitRow(cols, '', true, 'Total', true);
-    total.input = t.input; total.host = t.row; total.digits = true; total.paint = t.paint;
-    rows.push({ el: t.row, note: withNotes ? 'add them up' : '' });
-    return paperGrid(cols, rows, withNotes);
+    const answer = cellRow(cols, 'answerrow');
+    rows.push({ el: answer.row, note: withNotes ? 'add them up' : '' });
+    const idx = c => cols - 1 - c;   // column c (0 = ones) → cell position from the left
+
+    if (p.mode === 'carry') {
+      p.boxes.filter(b => b.type === 'digit').forEach(b => {
+        b.input = cellInput(answer.cells[idx(b.col)], 'Answer, ' + PLACE[b.col] + ' digit');
+      });
+      p.boxes.filter(b => b.type === 'carry').forEach(b => {
+        b.input = cellInput(carry.cells[idx(b.col + 1)], 'Carry into the ' + PLACE[b.col + 1]);
+      });
+    }
+
+    const wrap = paperGrid(cols, rows, withNotes);
+    wrap.classList.add('with-carries');
+    const ring = el('div', 'col-ring');
+    ring.hidden = true;
+    wrap.append(ring);
+
+    if (p.mode === 'guided') {
+      const row = el('div', 'colsum-row');
+      const label = el('span', 'colsum-label', '');
+      const input = numInput('Column total');
+      input.classList.add('colsum');
+      input.maxLength = 2;
+      row.append(label, input);
+      wrap.insertBefore(row, wrap.querySelector('.key'));
+      p.boxes.filter(b => b.type === 'colsum').forEach(b => { b.input = input; b.shared = true; });
+      p.colsumLabel = label;
+    }
+
+    // Circle the column being added, from its carry box down to its answer digit.
+    p.ring = col => {
+      if (col === null || col === undefined) { ring.hidden = true; return; }
+      const top = carry.cells[idx(col)].getBoundingClientRect();
+      const bottom = answer.cells[idx(col)].getBoundingClientRect();
+      const base = wrap.getBoundingClientRect();
+      if (!top.width) return;
+      ring.hidden = false;
+      ring.style.left = (top.left - base.left - 5) + 'px';
+      ring.style.top = (top.top - base.top - 5) + 'px';
+      ring.style.width = (top.width + 10) + 'px';
+      ring.style.height = (bottom.bottom - top.top + 10) + 'px';
+    };
+    p.carryCells = carry.cells;
+    p.answerCells = answer.cells;
+    p.cellIndex = idx;
+    return wrap;
+  }
+
+  function cellRow(cols, cls) {
+    const row = el('div', 'drow ' + cls);
+    row.style.gridColumn = '2 / span ' + cols;
+    row.style.gridTemplateColumns = 'repeat(' + cols + ', var(--cell))';
+    const cells = [];
+    for (let i = 0; i < cols; i++) { const c = el('span', 'cell'); c.append(el('span', 'v')); cells.push(c); row.append(c); }
+    return { row: row, cells: cells };
+  }
+  function cellInput(cell, label) {
+    const i = el('input', 'cellin');
+    i.type = 'text';
+    i.inputMode = 'numeric';
+    i.autocomplete = 'off';
+    i.maxLength = 1;
+    i.disabled = true;
+    i.setAttribute('aria-label', label);
+    i.addEventListener('input', () => { i.value = i.value.replace(/[^0-9]/g, '').slice(-1); });
+    cell.replaceChildren(i);
+    cell.classList.add('has-input');
+    return i;
+  }
+
+  // After each step: show regrouping (guided), and move the circle to the next column.
+  function updateSum(p) {
+    if (!p.mode || p.mode === 'whole' || !p.ring) return;   // nothing to add up (tens problems, whole-sum mode)
+    if (p.mode === 'guided') {
+      p.boxes.filter(b => b.type === 'colsum').forEach(b => {
+        if (!b.done || b.shownOnPaper) return;
+        b.shownOnPaper = true;
+        const ans = p.answerCells[p.cellIndex(b.col)].firstChild;
+        ans.textContent = String(b.write);
+        pop(ans);
+        if (b.carryOut) {
+          const cc = p.carryCells[p.cellIndex(b.col + 1)];
+          cc.firstChild.textContent = String(b.carryOut);
+          cc.classList.add('carried');
+          floatUp(cc.firstChild, ans);
+        }
+      });
+    }
+    // Only circle a column once the student has reached the adding.
+    const next = p.boxes.find(b => !b.done);
+    const cur = next && (next.type === 'colsum' || next.type === 'digit' || next.type === 'carry') ? next : null;
+    if (p.colsumLabel) {
+      p.colsumLabel.textContent = cur && cur.type === 'colsum' ? cap(PLACE[cur.col]) + ' column adds up to' : 'Column total';
+      const box = p.boxes.find(b => b.type === 'colsum');
+      if (box && cur && cur.type === 'colsum') { box.input.value = ''; box.input.classList.remove('ok', 'bad', 'shown'); }
+      p.colsumLabel.parentNode.hidden = !cur;
+    }
+    requestAnimationFrame(() => p.ring(cur ? cur.col : null));
+    p.currentCol = cur ? cur.col : null;
+  }
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  function pop(node) {
+    if (!node.animate) return;
+    node.animate([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1.15)', opacity: 1 }, { transform: 'none' }], { duration: 380, easing: 'ease-out' });
+  }
+  function floatUp(node, from) {
+    if (!node.animate) return;
+    const a = from.getBoundingClientRect(), b = node.getBoundingClientRect();
+    node.animate([{ transform: 'translate(' + (a.left - b.left) + 'px,' + (a.top - b.top) + 'px)', opacity: .3 }, { transform: 'none', opacity: 1 }],
+      { duration: 700, easing: 'cubic-bezier(.3,.7,.3,1)' });
   }
 
   // Display-only stack (used by the demo to show the standard algorithm).
@@ -420,7 +590,7 @@
     split.append(wrap);
     work.append(split);
 
-    p.update = () => {
+    p.updateDiagram = () => {
       p.regions.forEach(g => {
         const topDone = byType('top', g.c).done;
         const sideDone = p.sideGiven || byType('side', g.r).done;
@@ -440,15 +610,20 @@
     if (state) h.classList.add(state);
   }
   function fill(b, v) {
+    if (b.blankZero && Number(v) === 0) { b.input.value = ''; b.input.classList.add('zero'); if (b.paint) b.paint(''); return; }
     b.input.value = b.digits ? String(v) : fmt(v);
     if (b.paint) b.paint(b.input.value);
   }
 
   window.AreaCore = {
-    make(kind, nums) {
-      if (kind === 'tens') return tensProblem(nums);
-      if (kind === 'area1') return area1Problem(nums);
-      return twoByTwoProblem(kind === 'partial2', nums);
+    make(kind, nums, opts) {
+      let p;
+      if (kind === 'tens') p = tensProblem(nums);
+      else if (kind === 'area1') p = area1Problem(nums, opts);
+      else p = twoByTwoProblem(kind === 'partial2', nums, opts);
+      // every step refreshes the diagram labels and the adding column
+      p.update = () => { if (p.updateDiagram) p.updateDiagram(); updateSum(p); };
+      return p;
     },
     host: host, mark: mark, fill: fill,
     fmt: fmt, el: el, svgEl: svgEl,
