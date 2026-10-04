@@ -17,7 +17,7 @@ window.MATH_REALM_CATALOG = {
   // Which page plays each skill, matched by the start of the skillId.
   // ready: false shows "Opening soon" until that game is built.
   games: [
-    { prefix: 'g3.',    page: 'flashcards.html', ready: false },
+    { prefix: 'g3.',    page: 'flashcards.html', ready: true  },
     { prefix: 'g4.u6.', page: 'area-model.html', ready: false },
   ],
 };
