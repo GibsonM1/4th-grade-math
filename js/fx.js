@@ -1,16 +1,18 @@
 /*
- * Math Realm: sound effects and confetti, shared by every game.
- * Sound starts OFF (it's a classroom). A student's choice is remembered on that computer.
+ * Math Realm: sound effects, background music and confetti, shared by every game.
+ *
  *   RealmFX.correct()  RealmFX.wrong()  RealmFX.fanfare()  RealmFX.confetti()
- *   RealmFX.soundOn    RealmFX.toggleSound()
+ *   RealmFX.soundOn / RealmFX.toggleSound()        sound effects start OFF
+ *   RealmMusic.on   / RealmMusic.toggle()          music starts ON (after the first click)
+ *
+ * The music is original and made in the browser: a slow, dreamy chord loop
+ * with a soft music-box melody and the odd sparkle. Nothing is downloaded.
+ * Each computer remembers a student's music and sound choices.
  */
-window.RealmFX = (function () {
+(function () {
   'use strict';
-  const KEY = 'mathRealm.sound';
-  let soundOn = false;
-  try { soundOn = localStorage.getItem(KEY) === 'on'; } catch (e) { /* storage blocked */ }
-  let ctx = null;
 
+  let ctx = null;
   function audio() {
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -20,6 +22,20 @@ window.RealmFX = (function () {
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
+  function pref(key, fallback) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : v === 'on'; } catch (e) { return fallback; }
+  }
+  function savePref(key, on) {
+    try { localStorage.setItem(key, on ? 'on' : 'off'); } catch (e) { /* fine */ }
+  }
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  const hz = midi => 440 * Math.pow(2, (midi - 69) / 12);
+
+  /* ── Sound effects ── */
+
+  let soundOn = pref('mathRealm.sound', false);
 
   function note(freq, at, dur, type, vol) {
     const a = audio();
@@ -37,22 +53,18 @@ window.RealmFX = (function () {
     osc.stop(t + dur + 0.05);
   }
 
-  function reducedMotion() {
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-
-  return {
+  window.RealmFX = {
     get soundOn() { return soundOn; },
     toggleSound() {
       soundOn = !soundOn;
-      try { localStorage.setItem(KEY, soundOn ? 'on' : 'off'); } catch (e) { /* fine */ }
+      savePref('mathRealm.sound', soundOn);
       if (soundOn) this.correct();
       return soundOn;
     },
     correct() {
       if (!soundOn) return;
-      note(1046.5, 0, 0.18, 'triangle');      // C6
-      note(1318.5, 0.07, 0.22, 'triangle');   // E6
+      note(1046.5, 0, 0.18, 'triangle');
+      note(1318.5, 0.07, 0.22, 'triangle');
     },
     wrong() {
       if (!soundOn) return;
@@ -73,19 +85,171 @@ window.RealmFX = (function () {
       for (let i = 0; i < 70; i++) {
         const p = document.createElement('i');
         const size = 6 + Math.random() * 8;
-        const x = Math.random() * 100;
         const drift = (Math.random() - 0.5) * 30;
-        const dur = 1.6 + Math.random() * 1.4;
-        p.style.cssText = 'position:absolute;top:-20px;left:' + x + 'vw;width:' + size + 'px;height:' + (size * 0.6) + 'px;' +
+        p.style.cssText = 'position:absolute;top:-20px;left:' + (Math.random() * 100) + 'vw;width:' + size + 'px;height:' + (size * 0.6) + 'px;' +
           'background:' + colors[i % colors.length] + ';border-radius:2px;opacity:.95';
         p.animate(
           [{ transform: 'translate(0,0) rotate(0deg)' }, { transform: 'translate(' + drift + 'vw,105vh) rotate(' + (360 + Math.random() * 540) + 'deg)' }],
-          { duration: dur * 1000, delay: Math.random() * 400, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' }
+          { duration: 1600 + Math.random() * 1400, delay: Math.random() * 400, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' }
         );
         layer.appendChild(p);
       }
       document.body.appendChild(layer);
       setTimeout(() => layer.remove(), 3600);
+    },
+  };
+
+  /* ── Background music ── */
+
+  const BPM = 72;
+  const STEP = 60 / BPM / 2;     // eighth notes
+  // D major, two 4-bar phrases: D A Bm G | Bm G D A
+  const CHORDS = [[62, 66, 69], [57, 61, 64], [59, 62, 66], [55, 59, 62], [59, 62, 66], [55, 59, 62], [62, 66, 69], [57, 61, 64]];
+  // Music-box patterns over one bar (8 eighth notes). Numbers pick chord tones; 3-5 are an octave up; null is a rest.
+  const PATTERNS = [
+    [0, 1, 2, 4, 2, 1, null, null],
+    [0, null, 2, null, 3, null, 2, 1],
+    [2, 1, 0, null, 1, 2, 4, null],
+    [null, 0, 1, 2, null, 2, 1, null],
+    [0, 2, 4, 5, 4, 2, null, null],
+  ];
+  const SPARKLE = [86, 88, 90, 93, 95, 98];   // D major pentatonic, way up high
+
+  let musicOn = pref('mathRealm.music', true);
+  let playing = false, timer = null, nextAt = 0, step = 0, pattern = PATTERNS[0];
+  let bus = null;
+
+  function buildBus(a) {
+    const master = a.createGain();
+    master.gain.value = 0.0001;
+    const tone = a.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 2400;
+    const verb = a.createConvolver();
+    const len = a.sampleRate * 3;
+    const ir = a.createBuffer(2, len, a.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    }
+    verb.buffer = ir;
+    const wet = a.createGain();
+    wet.gain.value = 0.45;
+    tone.connect(master);
+    tone.connect(verb).connect(wet).connect(master);
+    master.connect(a.destination);
+    return { master: master, input: tone };
+  }
+
+  function voice(a, freq, at, dur, opts) {
+    const osc = a.createOscillator();
+    const g = a.createGain();
+    osc.type = opts.type;
+    osc.frequency.setValueAtTime(freq, at);
+    if (opts.detune) osc.detune.setValueAtTime(opts.detune, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(opts.vol, at + opts.attack);
+    if (opts.hold) g.gain.setValueAtTime(opts.vol, at + opts.hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    osc.connect(g).connect(bus.input);
+    osc.start(at);
+    osc.stop(at + dur + 0.1);
+  }
+
+  function schedule(a, s, at) {
+    const bar = Math.floor(s / 8) % CHORDS.length;
+    const beat = s % 8;
+    const chord = CHORDS[bar];
+    if (beat === 0) {
+      pattern = Math.random() < 0.25 ? null : PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+      const barLen = STEP * 8;
+      chord.forEach(m => {                       // soft pad
+        voice(a, hz(m), at, barLen + 1.6, { type: 'sine', vol: 0.05, attack: 1.0, hold: barLen - 0.2 });
+        voice(a, hz(m), at, barLen + 1.6, { type: 'triangle', vol: 0.018, attack: 1.2, hold: barLen - 0.2, detune: 6 });
+      });
+      voice(a, hz(chord[0] - 24), at, 2.4, { type: 'sine', vol: 0.07, attack: 0.05 });   // low root
+    }
+    if (beat === 4) voice(a, hz(chord[0] - 24), at, 1.8, { type: 'sine', vol: 0.045, attack: 0.05 });
+    if (pattern && pattern[beat] != null) {      // music box
+      const i = pattern[beat];
+      const m = chord[i % 3] + 12 + (i >= 3 ? 12 : 0);
+      voice(a, hz(m), at, 0.9, { type: 'triangle', vol: 0.03, attack: 0.008 });
+    }
+    if (beat % 2 === 1 && Math.random() < 0.08) {  // the odd sparkle
+      voice(a, hz(SPARKLE[Math.floor(Math.random() * SPARKLE.length)]), at, 1.4, { type: 'sine', vol: 0.014, attack: 0.005 });
+    }
+  }
+
+  function tick() {
+    const a = ctx;
+    if (!a || !playing) return;
+    while (nextAt < a.currentTime + 0.25) {
+      schedule(a, step, nextAt);
+      nextAt += STEP;
+      step++;
+    }
+  }
+
+  function start() {
+    if (playing || !musicOn) return;
+    const a = audio();
+    if (!a) return;
+    if (!bus) bus = buildBus(a);
+    playing = true;
+    step = 0;
+    nextAt = a.currentTime + 0.1;
+    bus.master.gain.cancelScheduledValues(a.currentTime);
+    bus.master.gain.setValueAtTime(Math.max(bus.master.gain.value, 0.0001), a.currentTime);
+    bus.master.gain.exponentialRampToValueAtTime(0.8, a.currentTime + 2.5);    // gentle fade in
+    timer = setInterval(tick, 50);
+    tick();
+  }
+
+  function stop() {
+    if (!playing) return;
+    playing = false;
+    clearInterval(timer);
+    const a = ctx;
+    bus.master.gain.cancelScheduledValues(a.currentTime);
+    bus.master.gain.setValueAtTime(Math.max(bus.master.gain.value, 0.0001), a.currentTime);
+    bus.master.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.8);
+  }
+
+  // Browsers only allow sound after a click or key press, so music waits for the first one.
+  function firstGesture() {
+    document.removeEventListener('pointerdown', firstGesture, true);
+    document.removeEventListener('keydown', firstGesture, true);
+    if (musicOn) start();
+  }
+  document.addEventListener('pointerdown', firstGesture, true);
+  document.addEventListener('keydown', firstGesture, true);
+
+  // Pause while the tab is hidden, pick back up when it returns.
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.hidden) ctx.suspend();
+    else if (playing || soundOn) ctx.resume();
+  });
+
+  window.RealmMusic = {
+    get on() { return musicOn; },
+    // Renders the music offline (used to make a preview recording).
+    renderPreview(seconds) {
+      const Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const off = new Off(2, Math.ceil(44100 * seconds), 44100);
+      const saved = bus;
+      bus = buildBus(off);
+      bus.master.gain.setValueAtTime(0.0001, 0);
+      bus.master.gain.exponentialRampToValueAtTime(0.8, 2.5);
+      for (let s = 0, at = 0.1; at < seconds - 2; s++, at += STEP) schedule(off, s, at);
+      bus = saved;
+      return off.startRendering();
+    },
+    toggle() {
+      musicOn = !musicOn;
+      savePref('mathRealm.music', musicOn);
+      if (musicOn) start(); else stop();
+      return musicOn;
     },
   };
 })();
