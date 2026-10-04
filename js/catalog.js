@@ -18,7 +18,9 @@ window.MATH_REALM_CATALOG = {
   zones: [
     { zone: '3rd Grade Review', title: 'Fact Garden',       blurb: 'Grow your times tables and division facts until they bloom.', accent: 'mint',
       link: { label: 'Speed challenge', page: 'challenge.html' } },
-    { zone: 'Unit 6',           title: 'Rectangle Kingdom', blurb: 'Build big multiplication problems out of rectangles.',        accent: 'berry' },
+    { zone: 'Unit 6',           title: 'Rectangle Kingdom', blurb: 'Build big multiplication problems out of rectangles.',        accent: 'berry',
+      link: { label: 'See how it works', page: 'how-it-works.html' } },
+    { zone: 'Decimals',         title: 'Unicorn Racetrack', blurb: 'Race your unicorn along the number line with tenths and hundredths.', accent: 'sky' },
   ],
 
   // Which page plays each skill, matched by the start of the skillId.
@@ -26,5 +28,6 @@ window.MATH_REALM_CATALOG = {
   games: [
     { prefix: 'g3.',    page: 'flashcards.html', ready: true  },
     { prefix: 'g4.u6.', page: 'area-model.html', ready: true  },
+    { prefix: 'g4.dec.', page: 'unicorn-race.html', ready: true },
   ],
 };
