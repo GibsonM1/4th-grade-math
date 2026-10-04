@@ -10,6 +10,11 @@
  * save data. A fast, correct answer with no help moves it up a box; a miss
  * drops it to box 1. Low boxes come up more often, so missed facts come back
  * until they stick.
+ *
+ * The see-through grid under the card shows for any fact below box 3, so a
+ * student sees the area picture until they've answered that fact quickly
+ * twice, and again whenever they miss it. It doesn't count as help: counting
+ * squares is too slow to meet the speed goal anyway.
  */
 (function () {
   'use strict';
@@ -24,6 +29,7 @@
   // How the grid splits a hard number into easier pieces
   const SPLITS = { 3: [2, 1], 4: [2, 2], 6: [5, 1], 7: [5, 2], 8: [4, 4], 9: [5, 4], 11: [10, 1], 12: [10, 2] };
   const COLORS = ['#4FD1AB', '#FF7EB6'];
+  const GHOST_UNTIL_BOX = 3;
   const BOX_WEIGHT = [6, 8, 5, 3, 2, 1];   // index = box. 0 = never seen, 1 = missed or needed help, 5 = solid
   const PRAISE = ['Yes!', 'Nice!', 'You got it!', 'Super!', 'Great!'];
   const STAR_PATH = 'M14 2.8l3.4 7 7.7 1-5.6 5.3 1.4 7.6L14 19.9l-6.9 3.8 1.4-7.6-5.6-5.3 7.7-1z';
@@ -58,10 +64,15 @@
   function setupTopbar() {
     $('#gemName').textContent = C.pointsName;
     updateGems();
-    const btn = $('#soundBtn');
-    const paint = () => { btn.textContent = 'Sound: ' + (RealmFX.soundOn ? 'on' : 'off'); btn.setAttribute('aria-pressed', String(RealmFX.soundOn)); };
-    paint();
-    btn.addEventListener('click', () => { RealmFX.toggleSound(); paint(); btn.blur(); });
+    const toggles = [
+      { btn: $('#soundBtn'), label: 'Sounds', get: () => RealmFX.soundOn, flip: () => RealmFX.toggleSound() },
+      { btn: $('#musicBtn'), label: 'Music', get: () => RealmMusic.on, flip: () => RealmMusic.toggle() },
+    ];
+    toggles.forEach(t => {
+      const paint = () => { t.btn.textContent = t.label + ': ' + (t.get() ? 'on' : 'off'); t.btn.setAttribute('aria-pressed', String(t.get())); };
+      paint();
+      t.btn.addEventListener('click', () => { t.flip(); paint(); t.btn.blur(); });
+    });
   }
   function updateGems() {
     const s = MathRealm.session;
@@ -185,6 +196,7 @@
     $('#helpBtn').hidden = false;
     $('#helpBtn').disabled = false;
     $('#nextBtn').hidden = true;
+    drawGhost();
     mode = 'answering';
     updateProgress();
     shownAt = performance.now();
@@ -224,6 +236,7 @@
     if (correct) {
       mode = 'right';
       $('#problem').dataset.state = 'right';
+      $('#ghost').classList.add('lit');
       $('#checkBtn').disabled = true;
       $('#helpBtn').disabled = true;
       $('#feedback').textContent = helpUsed ? 'Yes! The grid helped.' : (SPEED_MS && ms < SPEED_MS * 0.6 ? 'Speedy!' : PRAISE[Math.floor(Math.random() * PRAISE.length)]);
@@ -249,10 +262,30 @@
     }
   }
 
+  /* ── The see-through grid under the card ── */
+
+  function drawGhost() {
+    const box = (memory.facts[card.fact.key] || {}).b || 0;
+    const ghost = $('#ghost');
+    ghost.classList.remove('lit');
+    if (box >= GHOST_UNTIL_BOX) { ghost.hidden = true; ghost.replaceChildren(); return; }
+    const cell = 18, R = card.rows, Cc = card.cols, W = Cc * cell, H = R * cell;
+    const svg = svgEl('svg', { viewBox: '-1 -1 ' + (W + 2) + ' ' + (H + 2), width: W + 2, height: H + 2 });
+    svg.append(svgEl('rect', { class: 'area', x: 0, y: 0, width: W, height: H }));
+    for (let r = 1; r < R; r++) svg.append(svgEl('line', { x1: 0, x2: W, y1: r * cell, y2: r * cell }));
+    for (let c = 1; c < Cc; c++) svg.append(svgEl('line', { y1: 0, y2: H, x1: c * cell, x2: c * cell }));
+    svg.append(svgEl('rect', { class: 'frame', x: 0, y: 0, width: W, height: H, rx: 2 }));
+    ghost.replaceChildren(svg);
+    ghost.hidden = false;
+    // restart the fade-in for each new card
+    ghost.style.animation = 'none'; void ghost.offsetWidth; ghost.style.animation = '';
+  }
+
   /* ── The grid ── */
 
   function showHelp(explain) {
     if (!explain) helpUsed = true;
+    $('#ghost').hidden = true;
     $('#help').hidden = false;
     $('#helpBtn').hidden = true;
     $('#turnBtn').hidden = card.fact.kind !== 'mult' || card.rows === card.cols;
