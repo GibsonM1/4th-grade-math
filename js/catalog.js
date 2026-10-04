@@ -7,10 +7,17 @@ window.MATH_REALM_CATALOG = {
   realmName: 'Math Realm',      // the class could vote on a name
   pointsName: 'gems',
 
+  // Saying answers out loud in the speed challenge. In Chrome, the audio goes to
+  // Google's speech service to be turned into text, so leave this false until the
+  // district says it's OK for students. Change to true to turn it on.
+  voiceAnswers: false,
+
   // One entry per "zone" value on the Skills tab, in the order they appear on the home page.
   // accent: mint, berry or sky. A zone on the Skills tab that isn't listed here still shows up, under its own name.
+  // link (optional): an extra button on that zone's card.
   zones: [
-    { zone: '3rd Grade Review', title: 'Fact Garden',       blurb: 'Grow your times tables and division facts until they bloom.', accent: 'mint' },
+    { zone: '3rd Grade Review', title: 'Fact Garden',       blurb: 'Grow your times tables and division facts until they bloom.', accent: 'mint',
+      link: { label: 'Speed challenge', page: 'challenge.html' } },
     { zone: 'Unit 6',           title: 'Rectangle Kingdom', blurb: 'Build big multiplication problems out of rectangles.',        accent: 'berry' },
   ],
 
