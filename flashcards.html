@@ -47,6 +47,17 @@
   .retry-tag { position: absolute; top: 14px; left: 16px; padding: 3px 11px; border-radius: 999px; background: #FFF1C2; color: #7A5600; font-weight: 600; font-size: .85rem; }
 
   .question { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .28em; margin: 10px 0 6px; font: 800 clamp(3rem, 9vw, 4.6rem)/1.1 var(--display); color: var(--ink); }
+  /* Vertical multiplication:  5 / × 6 / rule / answer */
+  .vstack { display: inline-grid; grid-template-columns: auto auto; justify-items: end; align-items: center; column-gap: .25em; line-height: 1.05; }
+  .vstack .op { grid-row: 2; grid-column: 1; }
+  .vstack .n { grid-column: 2; }
+  .vstack .rule { grid-column: 1 / -1; justify-self: stretch; height: 6px; margin: 4px 0 6px; background: var(--ink); border-radius: 3px; }
+  .vstack .answer-box { grid-column: 1 / -1; justify-self: end; border-bottom: 0; text-align: right; padding-right: 0; }
+  /* Fraction:  24 over 6 */
+  .frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.05; font-size: .85em; }
+  .frac .top { padding: 0 .12em 4px; border-bottom: 6px solid var(--ink); }
+  .frac .bottom { padding-top: 4px; }
+
   .answer-box { min-width: 2.1em; padding: 0 .15em; border-bottom: 6px solid var(--violet); color: var(--violet); }
   .answer-box:empty::before { content: "?"; color: #CFC3EA; }
   .problem[data-state="right"] .answer-box { color: var(--mint-deep); border-color: var(--mint); }
@@ -75,6 +86,16 @@
   .key.check:active { box-shadow: 0 1px 0 var(--mint-deep); }
   .key:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   @media (max-width: 820px) { .key { padding: 13px 0; } }
+
+  /* The fraction-bar lesson */
+  .lesson-stage { position: relative; width: 340px; max-width: 100%; height: 230px; margin: 10px auto 6px; border-radius: var(--radius-md); background: #F6F1FF; overflow: hidden; }
+  .lesson-stage > * { position: absolute; transform: translate(-50%, -50%); }
+  .lesson-stage .num, .lesson-stage .sign { font: 800 4rem/1 var(--display); color: var(--ink); }
+  .lesson-stage .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--berry); }
+  .lesson-stage .bar { height: 7px; border-radius: 4px; background: var(--berry); }
+  .lesson-text p { margin: 0 0 8px; color: var(--ink); }
+  .lesson-text p[hidden] { display: none; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--violet); font: 600 1rem/1.4 var(--body); text-decoration: underline; cursor: pointer; }
 
   /* Results */
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 6px 0 18px; }
@@ -122,6 +143,31 @@
         <p id="ruleStar"></p>
       </div>
       <button class="btn btn-big" type="button" id="startBtn" disabled>Shuffling the cards…</button>
+      <p style="margin:14px 0 0" id="replayWrap" hidden><button class="link-btn" type="button" id="replayBtn">What does the fraction bar mean?</button></p>
+    </section>
+  </main>
+
+  <!-- Fraction-bar lesson (division, once a student has a star) -->
+  <main id="lesson" hidden>
+    <section class="screen-card card">
+      <p class="zone-name">A division secret</p>
+      <h1>The ÷ sign is a tiny fraction!</h1>
+      <div class="lesson-stage" id="stage" aria-hidden="true">
+        <span class="num" id="lNum">24</span>
+        <span class="dot" id="lDot1"></span>
+        <span class="bar" id="lBar"></span>
+        <span class="dot" id="lDot2"></span>
+        <span class="num" id="lDen">6</span>
+      </div>
+      <div class="lesson-text" aria-live="polite">
+        <p id="lText1"></p>
+        <p id="lText2" hidden></p>
+        <p id="lText3" hidden></p>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="lessonGo">Got it! Start</button>
+        <button class="btn btn-soft" type="button" id="lessonAgain">Show me again</button>
+      </div>
     </section>
   </main>
 
@@ -135,7 +181,7 @@
       <div class="left">
       <section class="problem card" id="problem" aria-label="Flashcard">
         <span class="retry-tag" id="retryTag" hidden>Try this one again</span>
-        <div class="question"><span id="q"></span><span>=</span><span class="answer-box" id="answerBox"></span></div>
+        <div class="question" id="question"></div>
         <p class="feedback" id="feedback" aria-live="polite"></p>
         <div class="help" id="help" hidden>
           <p class="help-text" id="helpText"></p>
