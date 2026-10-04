@@ -11,6 +11,12 @@
  * drops it to box 1. Low boxes come up more often, so missed facts come back
  * until they stick.
  *
+ * Card layouts: multiplication shows as a row (5 × 6 = ?) or stacked
+ * vertically, about half and half (VERTICAL_SHARE). Division shows as a row
+ * until a student has a star on that division skill; then a short lesson
+ * shows the ÷ sign turning into a fraction bar, and after that about a third
+ * of division cards show as a fraction (FRACTION_SHARE).
+ *
  * The see-through grid under the card shows for any fact below box 3, so a
  * student sees the area picture until they've answered that fact quickly
  * twice, and again whenever they miss it. It doesn't count as help: counting
@@ -30,6 +36,8 @@
   const SPLITS = { 3: [2, 1], 4: [2, 2], 6: [5, 1], 7: [5, 2], 8: [4, 4], 9: [5, 4], 11: [10, 1], 12: [10, 2] };
   const COLORS = ['#4FD1AB', '#FF7EB6'];
   const GHOST_UNTIL_BOX = 3;
+  const VERTICAL_SHARE = 0.5;    // share of multiplication cards written vertically
+  const FRACTION_SHARE = 0.35;   // share of division cards written as a fraction, after the lesson
   const BOX_WEIGHT = [6, 8, 5, 3, 2, 1];   // index = box. 0 = never seen, 1 = missed or needed help, 5 = solid
   const PRAISE = ['Yes!', 'Nice!', 'You got it!', 'Super!', 'Great!'];
   const STAR_PATH = 'M14 2.8l3.4 7 7.7 1-5.6 5.3 1.4 7.6L14 19.9l-6.9 3.8 1.4-7.6-5.6-5.3 7.7-1z';
@@ -53,11 +61,12 @@
   let memory = { v: 1, facts: {} };   // the student's fact boxes, saved on the server
   let deck = [], pos = 0, card = null, typed = '', helpUsed = false, turned = false;
   let mode = 'idle', shownAt = 0, round = null, results = [];
+  let answerEl = null, fractionsOn = false;
 
   /* ── Screens ── */
 
   function show(id) {
-    ['#intro', '#play', '#results', '#missing'].forEach(s => { $(s).hidden = s !== id; });
+    ['#intro', '#play', '#results', '#missing', '#lesson'].forEach(s => { $(s).hidden = s !== id; });
     window.scrollTo(0, 0);
   }
 
@@ -120,13 +129,14 @@
 
   MathRealm.loadState(GAME_ID).then(d => {
     if (d.ok && d.state && d.state.facts) memory = d.state;
+    $('#replayWrap').hidden = !(op === 'div' && lessonSeen());
     const btn = $('#startBtn');
     btn.disabled = false;
     btn.textContent = 'Start';
     btn.focus();
   });
-  $('#startBtn').addEventListener('click', startRound);
-  $('#againBtn').addEventListener('click', startRound);
+  $('#startBtn').addEventListener('click', begin);
+  $('#againBtn').addEventListener('click', begin);
 
   /* ── Facts ── */
 
@@ -163,14 +173,84 @@
     if (f.kind === 'mult') {
       const flip = Math.random() < 0.5;
       const x = flip ? f.b : f.a, y = flip ? f.a : f.b;
-      return { fact: f, text: x + ' × ' + y, prompt: x + ' × ' + y, answer: x * y, rows: x, cols: y, retry: false };
+      return { fact: f, text: x + ' × ' + y, prompt: x + ' × ' + y, answer: x * y, rows: x, cols: y, retry: false,
+        layout: Math.random() < VERTICAL_SHARE ? 'stack' : 'row', parts: [x, y] };
     }
-    return { fact: f, text: f.dividend + ' ÷ ' + f.divisor, prompt: f.dividend + ' ÷ ' + f.divisor, answer: f.quotient, rows: f.divisor, cols: f.quotient, retry: false };
+    return { fact: f, text: f.dividend + ' ÷ ' + f.divisor, prompt: f.dividend + ' ÷ ' + f.divisor, answer: f.quotient, rows: f.divisor, cols: f.quotient, retry: false,
+      layout: fractionsOn && Math.random() < FRACTION_SHARE ? 'frac' : 'row', parts: [f.dividend, f.divisor] };
+  }
+
+  /* ── The fraction-bar lesson ── */
+
+  function lessonSeen() { return !!(memory.lessons && memory.lessons.fractionBar); }
+  function lessonDue() {
+    if (op !== 'div' || lessonSeen()) return false;
+    const m = (MathRealm.session.mastery || {})[skillId] || {};
+    return (m.days || 0) >= 1 || m.status === 'mastered';
+  }
+
+  function begin() {
+    if (lessonDue()) playLesson(true);
+    else startRound();
+  }
+
+  let lessonAnims = [];
+  function playLesson(thenPlay) {
+    // Use one of this skill's own facts, ideally a two-digit one.
+    const pool = facts.filter(f => f.dividend >= 12 && f.divisor > 1);
+    const f = pool.find(x => x.dividend === 24 && x.divisor === 6) || pool[Math.floor(Math.random() * pool.length)] || facts[facts.length - 1];
+    const D = f.dividend, d = f.divisor, q = f.quotient;
+    $('#lNum').textContent = D;
+    $('#lDen').textContent = d;
+    $('#lText1').textContent = 'Look closely at the ÷ sign in ' + D + ' ÷ ' + d + '. It has a dot on top, a line, and a dot on the bottom.';
+    $('#lText2').textContent = 'Put the ' + D + ' where the top dot is and the ' + d + ' where the bottom dot is, and you get a fraction: ' + D + ' over ' + d + '. It means the same thing as ' + D + ' ÷ ' + d + ', so it also equals ' + q + '.';
+    $('#lText3').textContent = 'From now on, some of your division cards will be written this way. Same math, new look!';
+    $('#lText2').hidden = true;
+    $('#lText3').hidden = true;
+    $('#lessonGo').textContent = thenPlay ? 'Got it! Start' : 'Got it!';
+    $('#lessonGo').onclick = () => {
+      lessonAnims.forEach(a => a.cancel());
+      memory.lessons = Object.assign({}, memory.lessons, { fractionBar: true });
+      $('#replayWrap').hidden = false;
+      if (thenPlay) startRound(); else show('#intro');
+    };
+    show('#lesson');
+    animateLesson(D, d);
+  }
+  $('#lessonAgain').addEventListener('click', () => animateLesson(Number($('#lNum').textContent), Number($('#lDen').textContent)));
+  $('#replayBtn').addEventListener('click', () => playLesson(false));
+
+  function animateLesson() {
+    lessonAnims.forEach(a => a.cancel());
+    lessonAnims = [];
+    const W = $('#stage').clientWidth || 340, cx = W / 2;
+    const at = (node, x, y) => { node.style.left = x + 'px'; node.style.top = y + 'px'; };
+    const num = $('#lNum'), den = $('#lDen'), dot1 = $('#lDot1'), dot2 = $('#lDot2'), bar = $('#lBar');
+    const gap = Math.max(num.offsetWidth, 70) / 2 + 40;
+    // Start: written in a row, 24 ÷ 6
+    at(num, cx - gap, 115); at(den, cx + gap, 115); at(dot1, cx, 92); at(dot2, cx, 138); at(bar, cx, 115);
+    bar.style.width = '34px';
+    [num, den, dot1, dot2, bar].forEach(n => { n.style.opacity = 1; });
+    $('#lText2').hidden = true;
+    $('#lText3').hidden = true;
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const opts = { duration: still ? 1 : 1100, delay: still ? 0 : 1200, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' };
+    const go = (node, frames) => lessonAnims.push(node.animate(frames, opts));
+    go(num, [{ left: (cx - gap) + 'px', top: '115px' }, { left: cx + 'px', top: '62px' }]);
+    go(den, [{ left: (cx + gap) + 'px', top: '115px' }, { left: cx + 'px', top: '170px' }]);
+    go(dot1, [{ top: '92px', opacity: 1 }, { top: '62px', opacity: 0 }]);
+    go(dot2, [{ top: '138px', opacity: 1 }, { top: '170px', opacity: 0 }]);
+    go(bar, [{ width: '34px' }, { width: Math.max(num.offsetWidth + 30, 110) + 'px' }]);
+    lessonAnims[0].finished.then(() => {
+      $('#lText2').hidden = false;
+      setTimeout(() => { $('#lText3').hidden = false; }, still ? 0 : 900);
+    }).catch(() => { /* replayed before it finished */ });
   }
 
   /* ── Playing ── */
 
   function startRound() {
+    fractionsOn = op === 'div' && lessonSeen();
     round = MathRealm.startRound(GAME_ID, skillId);
     deck = pickDeck().map(makeCard);
     pos = 0;
@@ -185,8 +265,7 @@
     typed = '';
     helpUsed = false;
     turned = false;
-    $('#q').textContent = card.text;
-    $('#q').setAttribute('aria-label', card.text.replace('×', 'times').replace('÷', 'divided by'));
+    renderQuestion();
     renderAnswer();
     $('#feedback').textContent = '';
     $('#problem').dataset.state = '';
@@ -210,8 +289,28 @@
     $('#count').textContent = card && card.retry ? 'Practice card' : 'Card ' + Math.max(1, Math.min(current, ROUND_SIZE)) + ' of ' + ROUND_SIZE;
   }
 
+  function renderQuestion() {
+    const q = $('#question');
+    q.replaceChildren();
+    q.dataset.text = card.text;
+    q.setAttribute('aria-label', card.text.replace('×', 'times').replace('÷', 'divided by'));
+    answerEl = el('span', 'answer-box');
+    const [x, y] = card.parts;
+    if (card.layout === 'stack') {
+      const v = el('span', 'vstack');
+      v.append(el('span', 'n', String(x)), el('span', 'op', '×'), el('span', 'n', String(y)), el('span', 'rule'), answerEl);
+      q.append(v);
+    } else if (card.layout === 'frac') {
+      const f = el('span', 'frac');
+      f.append(el('span', 'top', String(x)), el('span', 'bottom', String(y)));
+      q.append(f, el('span', '', '='), answerEl);
+    } else {
+      q.append(el('span', '', card.text), el('span', '', '='), answerEl);
+    }
+  }
+
   function renderAnswer() {
-    $('#answerBox').textContent = typed;
+    answerEl.textContent = typed;
     $('#checkBtn').disabled = !typed || mode !== 'answering';
   }
 
