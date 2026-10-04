@@ -16,6 +16,10 @@
  *   await MathRealm.saveState('flashcards', { boxes: { ... } });
  *   const { state } = await MathRealm.loadState('flashcards');
  *
+ * Guest mode: MathRealm.startGuest() makes a pretend session with the built-in skill
+ * list and no token. Games play normally; nothing is sent to the server and nothing is
+ * saved. MathRealm.isGuest() is true, and every page shows a guest banner.
+ *
  * The login is kept in sessionStorage, so it ends when the browser tab closes.
  * On shared Chromebooks the next student never inherits someone else's login.
  * Rounds waiting to be sent are kept in localStorage and only send when the
@@ -47,6 +51,7 @@
     unknown_skill:   "This game uses a skill that isn't on the Skills tab.",
     no_attempts:     'There were no answers to send.',
     state_too_large: 'This save file is too big to store.',
+    guest:           'Not available in guest mode.',
     busy:            'The server is busy. Try again in a moment.',
     server_error:    'Something went wrong on the server. Details are in Apps Script under Executions.',
     not_enough_gems: 'Not enough gems for that yet.',
@@ -70,6 +75,7 @@
     unknown_skill:   "This game isn't set up yet. Tell your teacher.",
     busy:            'Lots of players right now! Try again in a moment.',
     server_error:    'Something went wrong. Tell your teacher.',
+    guest:           'Log in to use this.',
     not_enough_gems: "You don't have enough gems for that yet. Keep playing to earn more!",
     already_owned:   "That one is already yours!",
     not_owned:       "You'll need to adopt that one first.",
@@ -78,6 +84,32 @@
     claw_limit:      "That's all the claw machine plays for today. Come back tomorrow!",
     claw_empty:      "You've won every prize in the machine. Amazing!",
   };
+
+  // Mirrors the built-in skills in Code.gs, so guests see the same areas as students.
+  const GUEST_SKILLS = [
+    ['g3.mult.a', 'Multiply by 1, 2, 5, 10', '3rd Grade Review', 20, 0.9, 4000, 3, false],
+    ['g3.mult.b', 'Multiply by 3, 4, 6', '3rd Grade Review', 20, 0.9, 4000, 3, false],
+    ['g3.mult.c', 'Multiply by 7, 8, 9', '3rd Grade Review', 20, 0.9, 4000, 3, false],
+    ['g3.mult.d', 'Multiply by 11, 12', '3rd Grade Review', 20, 0.9, 4000, 3, false],
+    ['g3.mult.all', 'Multiplication facts 1–12, mixed', '3rd Grade Review', 30, 0.9, 4000, 3, true],
+    ['g3.div.a', 'Divide by 1, 2, 5, 10', '3rd Grade Review', 20, 0.9, 5000, 3, false],
+    ['g3.div.b', 'Divide by 3, 4, 6', '3rd Grade Review', 20, 0.9, 5000, 3, false],
+    ['g3.div.c', 'Divide by 7, 8, 9', '3rd Grade Review', 20, 0.9, 5000, 3, false],
+    ['g3.div.d', 'Divide by 11, 12', '3rd Grade Review', 20, 0.9, 5000, 3, false],
+    ['g3.div.all', 'Division facts 1–12, mixed', '3rd Grade Review', 30, 0.9, 5000, 3, true],
+    ['g4.u6.tens', 'Multiply with tens (30 × 4, 30 × 20)', 'Unit 6', 10, 0.9, 0, 3, false],
+    ['g4.u6.area1', 'Area diagrams: multi-digit × 1-digit', 'Unit 6', 6, 0.8, 0, 3, false],
+    ['g4.u6.area2', 'Area diagrams: 2-digit × 2-digit', 'Unit 6', 6, 0.8, 0, 3, true],
+    ['g4.u6.partial2', 'Partial products: 2-digit × 2-digit, no diagram', 'Unit 6', 6, 0.8, 0, 3, true],
+    ['g4.dec.tenths', 'Race with tenths (0.7 + 0.6)', 'Decimals', 6, 0.8, 0, 3, false],
+    ['g4.dec.hundredths', 'Race with hundredths (0.47 + 0.25)', 'Decimals', 6, 0.8, 0, 3, false],
+    ['g4.dec.mixed', 'Race with tenths and hundredths (0.4 + 0.25)', 'Decimals', 6, 0.8, 0, 3, true],
+    ['g4.frac.build', 'Build fractions with scoops (3/4 = 1/4 + 1/4 + 1/4)', 'Fractions', 8, 0.8, 0, 3, false],
+    ['g4.frac.equiv', 'Equivalent fractions (2/4 = 4/8)', 'Fractions', 8, 0.8, 0, 3, true],
+    ['g4.frac.mixed', 'More than a cup (1 3/4 = 7/4)', 'Fractions', 8, 0.8, 0, 3, false],
+    ['g4.frac.times', 'Feed a group (3 × 2/3 cup)', 'Fractions', 8, 0.8, 0, 3, true],
+    ['g4.frac.kg', 'Kitchen scale: tenths and hundredths of a kilogram', 'Fractions', 8, 0.8, 0, 3, false],
+  ].map(r => ({ skillId: r[0], name: r[1], zone: r[2], minItems: r[3], minAccuracy: r[4], maxMedianMs: r[5], daysNeeded: r[6], milestone: r[7] }));
 
   function readSession() {
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null; } catch (e) { return null; }
@@ -97,6 +129,7 @@
   function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   async function call(action, payload, retries) {
+    if (session && session.guest) return { ok: false, error: 'guest' };
     const url = String((window.MATH_REALM_CONFIG || {}).apiUrl || '').trim();
     if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return { ok: false, error: 'no_api_url' };
 
@@ -166,7 +199,26 @@
     return data;
   }
 
+  // In guest mode a round is scored here so the results screen still works; nothing is sent.
+  function guestRound(skillId, attempts) {
+    const skill = (session.skills || []).find(k => k.skillId === skillId) || { minItems: attempts.length, minAccuracy: 0.8, maxMedianMs: 0, daysNeeded: 3 };
+    const items = attempts.length;
+    const independent = attempts.filter(a => a.correct && !a.hintUsed).length;
+    const accuracy = items ? independent / items : 0;
+    const times = attempts.map(a => a.ms).filter(ms => ms > 0).sort((a, b) => a - b);
+    const medianMs = times.length ? (times.length % 2 ? times[(times.length - 1) / 2] : Math.round((times[times.length / 2 - 1] + times[times.length / 2]) / 2)) : 0;
+    const fastEnough = !skill.maxMedianMs || (medianMs > 0 && medianMs <= skill.maxMedianMs);
+    return {
+      ok: true, guest: true,
+      round: { items: items, correct: attempts.filter(a => a.correct).length, independentCorrect: independent, accuracy: accuracy, medianMs: medianMs, fastEnough: fastEnough, qualifies: items >= skill.minItems && accuracy >= skill.minAccuracy && fastEnough },
+      points: { base: 0, streakBonus: 0, reducedForMastered: false, earned: 0, masteryBonus: 0, total: 0, balance: 0, lifetime: 0 },
+      mastery: { skillId: skillId, status: '', days: 0, daysNeeded: skill.daysNeeded, qualifiedToday: false, newlyMastered: false },
+      ticket: null,
+    };
+  }
+
   async function submitRound(gameId, skillId, attempts, roundId) {
+    if (session && session.guest) return guestRound(skillId, attempts);
     roundId = roundId || newId();
     const who = session ? session.who : null;          // captured first: a timed-out login clears the session
     const data = await sendRound(gameId, skillId, attempts, roundId);
@@ -179,6 +231,7 @@
     return data;
   }
 
+  const guestSaves = {};
   let flushing = null;
   function flushPending() {
     if (flushing) return flushing;
@@ -205,7 +258,36 @@
   window.MathRealm = {
     get session() { return session; },
     get student() { return session ? session.student : null; },
-    isLoggedIn() { return !!(session && session.token); },
+    isLoggedIn() { return !!(session && (session.token || session.guest)); },
+    isGuest() { return !!(session && session.guest); },
+
+    // A look around with nothing saved: real games, no account.
+    startGuest() {
+      session = {
+        guest: true,
+        student: { displayName: 'Guest', points: 0, lifetimePoints: 0 },
+        skills: GUEST_SKILLS.map(k => Object.assign({}, k)),
+        mastery: {}, tickets: [], shop: { owned: [], equipped: {} },
+      };
+      writeSession(session);
+      return session;
+    },
+
+    // A bar every page shows in guest mode. next = where to come back to after logging in.
+    guestBanner(next) {
+      if (!this.isGuest()) return null;
+      const bar = document.createElement('div');
+      bar.className = 'guestbar';
+      const text = document.createElement('span');
+      text.innerHTML = '<strong>Guest mode.</strong> Play as much as you like! Nothing is saved: no ' +
+        ((window.MATH_REALM_CATALOG || {}).pointsName || 'gems') + ', stars or prizes.';
+      const a = document.createElement('a');
+      a.className = 'btn btn-small';
+      a.href = 'index.html?login=1' + (next ? '&next=' + encodeURIComponent(next) : '');
+      a.textContent = 'Log in to save';
+      bar.append(text, a);
+      return bar;
+    },
     newId: newId,
 
     ping() { return call('ping', {}, 0); },
@@ -243,7 +325,7 @@
 
     // For game pages: if nobody is logged in, go to the login page and come back here afterward.
     requireLogin() {
-      if (session && session.token) return true;
+      if (session && (session.token || session.guest)) return true;
       const here = location.pathname.split('/').pop() + location.search;
       location.replace('index.html' + (here && here !== 'index.html' ? '?next=' + encodeURIComponent(here) : ''));
       return false;
@@ -280,7 +362,11 @@
       };
     },
 
-    saveState(gameId, state) { return call('saveState', { gameId: gameId, state: state }, 2); },
+    // Guests get an in-memory save, so games that save progress still work during a visit.
+    saveState(gameId, state) {
+      if (session && session.guest) { guestSaves[gameId] = state; return Promise.resolve({ ok: true, saved: true, guest: true }); }
+      return call('saveState', { gameId: gameId, state: state }, 2);
+    },
 
     // Sprite Shop. Prices and ownership are checked on the server.
     shop() { return call('shop', {}, 2); },
@@ -311,7 +397,10 @@
       }
       return data;
     },
-    loadState(gameId) { return call('loadState', { gameId: gameId }, 2); },
+    loadState(gameId) {
+      if (session && session.guest) return Promise.resolve({ ok: true, state: guestSaves[gameId] || null, updated: null, guest: true });
+      return call('loadState', { gameId: gameId }, 2);
+    },
 
     // errorMessage(code) for adults; errorMessage(code, true) for students
     errorMessage(code, forStudent) {

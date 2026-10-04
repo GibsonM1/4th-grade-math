@@ -207,3 +207,12 @@ button.pill:hover, a.pill:hover { background: rgba(255, 255, 255, .2); }
 .gems { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 6px 8px; border-radius: 999px; background: rgba(255, 255, 255, .12); border: 2px solid rgba(255, 255, 255, .28); font-weight: 600; }
 .gems svg { width: 30px; height: 30px; }
 .gems strong { font-family: var(--display); font-size: 1.45rem; font-weight: 800; }
+
+/* Guest mode banner (every page shows one while browsing without a login) */
+.guestbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px;
+  margin: 0 0 16px; padding: 10px 16px; border-radius: var(--radius-md);
+  background: var(--lemon); color: var(--ink); font-weight: 600; text-align: center;
+}
+.guestbar .btn { background: var(--berry); box-shadow: 0 4px 0 var(--berry-deep); }
+.locked-note { margin: 0; font-weight: 600; color: var(--ink-soft); }

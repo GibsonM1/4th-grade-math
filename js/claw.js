@@ -11,6 +11,13 @@
   'use strict';
   if (!MathRealm.requireLogin()) return;
 
+  // Guest mode: a banner on every page, so nobody thinks their work is being saved.
+  (function () {
+    const bar = MathRealm.guestBanner(location.pathname.split('/').pop() + location.search);
+    const slot = document.getElementById('guestSlot');
+    if (bar && slot) slot.append(bar);
+  })();
+
   const C = window.MATH_REALM_CATALOG;
   const $ = s => document.querySelector(s);
   const INK = '#2A1F45';
@@ -19,6 +26,7 @@
   const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let items = [], owned = [], equipped = {}, balance = 0, claw = {}, pile = [];
+  const GUEST = MathRealm.isGuest();
   let mode = 'loading', cx = HOME_X, cy = REST_Y, open = 1, carry = null, dir = 0, timeLeft = TIME, timerId = 0, lastWhirr = 0;
 
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -164,6 +172,7 @@
     }
     $('#plays').textContent = claw.playsLeft == null ? '' : claw.playsLeft === 1 ? '1 play left today.' : claw.playsLeft + ' plays left today.';
     const btn = $('#playBtn');
+    if (GUEST) { btn.disabled = true; btn.textContent = 'Log in to play'; return; }
     const why = !pile.length ? 'empty' : claw.playsLeft === 0 ? 'limit' : balance < claw.cost ? 'gems' : '';
     btn.disabled = mode !== 'idle' || !!why;
     btn.textContent = why === 'gems' ? 'Need ' + (claw.cost - balance) + ' more ' + C.pointsName
@@ -419,6 +428,22 @@
 
   build();
   setGems((MathRealm.student || {}).points || 0);
+  if (GUEST) {
+    // Guests can admire the machine; playing needs an account.
+    document.querySelector('.gems').hidden = true;
+    items = RealmSprites.accessoryIds.map(id => ({ itemId: id, name: id, kind: 'accessory' }));
+    owned = []; equipped = {}; claw = {};
+    fillPile();
+    $('#odds').textContent = 'Students win hats, glasses, necklaces, bracelets and shoes here with the gems they earn doing math.';
+    $('#luckyBox').hidden = true;
+    $('#plays').textContent = '';
+    status('Log in to play the claw machine and win prizes for your critter!');
+    const go = el('a', 'btn btn-big', 'Log in to play');
+    go.href = 'index.html?login=1&next=claw.html';
+    $('#playBtn').replaceWith(go);
+    return;
+  }
+
   MathRealm.shop().then(d => {
     if (!d.ok) { status(MathRealm.errorMessage(d.error, true), 'miss'); return; }
     items = d.items; owned = d.owned; equipped = d.equipped; claw = d.claw || {};

@@ -18,6 +18,10 @@
   .login .tagline { margin: -10px 0 0; color: var(--haze); font-size: 1.1rem; text-align: center; }
   .login-card { width: min(420px, 100%); padding: 28px 26px 26px; }
   .login-card h2 { font-size: 1.5rem; margin-bottom: 18px; color: var(--violet); }
+  .guest-row { margin-top: 18px; padding-top: 16px; border-top: 2px dashed var(--card-edge); text-align: center; }
+  .guest-row p { margin: 0 0 10px; color: var(--ink-soft); font-weight: 600; }
+  .guest-row .btn { width: 100%; }
+  .guest-row .small { margin: 10px 0 0; font-weight: 400; font-size: .88rem; }
 
   /* ── Home ── */
   .hub { max-width: 1120px; margin: 0 auto; padding: 26px 20px 64px; }
@@ -102,6 +106,11 @@
         <p class="form-error" id="loginError" role="alert" hidden></p>
         <button class="btn btn-big" type="submit" id="loginBtn">Let's go!</button>
       </form>
+      <div class="guest-row">
+        <p>Just looking?</p>
+        <button class="btn btn-soft" type="button" id="guestBtn">Play as a guest</button>
+        <p class="small">Try every game without a login. Nothing is saved, so no gems, stars or prizes.</p>
+      </div>
     </section>
   </main>
 
@@ -121,6 +130,8 @@
         <button class="btn btn-soft btn-small" type="button" id="logoutBtn">Log out</button>
       </div>
     </header>
+
+    <div id="guestSlot"></div>
 
     <div class="banner" id="pendingBanner" role="status" hidden>
       <span id="pendingText"></span>
@@ -214,6 +225,13 @@
     $('#loginError').hidden = !text;
   }
 
+  $('#guestBtn').addEventListener('click', () => {
+    MathRealm.startGuest();
+    const next = safeNext();
+    if (next) { location.href = next; return; }
+    showHub(true);
+  });
+
   $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.currentTarget;
@@ -248,13 +266,17 @@
   function render(celebrate) {
     const s = MathRealm.session;
     if (!s) return;
-    $('#hello').textContent = 'Hi, ' + s.student.displayName + '!';
+    const guest = MathRealm.isGuest();
+    $('#guestSlot').replaceChildren(...(guest ? [MathRealm.guestBanner('')] : []));
+    $('#hello').textContent = guest ? 'Welcome, guest!' : 'Hi, ' + s.student.displayName + '!';
     const pick = window.RealmSprites && s.shop && s.shop.equipped && RealmSprites.critter(s.shop.equipped.avatar);
     $('#avatar').replaceChildren(...(pick ? [RealmSprites.critterSvg(pick)] : []));
     $('#avatar').hidden = !pick;
+    $('#gems').hidden = guest;
     $('#gemCount').textContent = Number(s.student.points || 0).toLocaleString();
     $('#gems').setAttribute('aria-label', s.student.points + ' ' + C.pointsName);
-    renderTickets(s.tickets || []);
+    $('#logoutBtn').textContent = guest ? 'Log in' : 'Log out';
+    renderTickets(guest ? [] : (s.tickets || []));
     renderMap(s, celebrate);
     renderPending();
   }
@@ -452,12 +474,15 @@
 
   /* ── Start ── */
 
+  const wantsLogin = new URLSearchParams(location.search).get('login') === '1';
+  if (wantsLogin && MathRealm.isGuest()) MathRealm.logout();
   if (!MathRealm.isLoggedIn()) {
     showLogin('');
   } else {
     const next = safeNext();
     if (next) { location.replace(next); return; }
     showHub(true);
+    if (MathRealm.isGuest()) return;
     // Fresh numbers from the server (a teacher may have redeemed a ticket), then send anything waiting.
     const snapshot = () => JSON.stringify(MathRealm.session);
     const before = snapshot();

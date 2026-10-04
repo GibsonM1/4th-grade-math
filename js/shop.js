@@ -10,6 +10,13 @@
   'use strict';
   if (!MathRealm.requireLogin()) return;
 
+  // Guest mode: a banner on every page, so nobody thinks their work is being saved.
+  (function () {
+    const bar = MathRealm.guestBanner(location.pathname.split('/').pop() + location.search);
+    const slot = document.getElementById('guestSlot');
+    if (bar && slot) slot.append(bar);
+  })();
+
   const C = window.MATH_REALM_CATALOG;
   const SLOT_WORD = { hat: 'hat', face: 'glasses', neck: 'necklace', wrist: 'bracelet', feet: 'shoes' };
   RealmMusic.setTheme('shop');
@@ -24,6 +31,7 @@
   const $ = s => document.querySelector(s);
   const GEM = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#2A1F45" stroke-width="2" stroke-linejoin="round"/></svg>';
   let items = [], owned = [], equipped = {}, balance = 0, tab = 'critter', asking = null, busy = false, growth = 0;
+  const GUEST = MathRealm.isGuest();
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -75,17 +83,19 @@
     renderGrowthNote();
     const grid = $('#grid');
     grid.replaceChildren();
+    document.querySelector('.gems').hidden = GUEST;
     items.filter(it => it.kind === tab && art(it)).forEach(it => {
       const mine = isMine(it), on = isEquipped(it), t = title(it);
       const locked = it.kind === 'accessory' && !mine;
-      const card = el('article', 'item card' + (mine ? ' mine' : '') + (on ? ' equipped' : '') + (locked ? ' locked' : '') + (it.itemId === popId ? ' pop' : ''));
+      const card = el('article', 'item card' + (mine && !GUEST ? ' mine' : '') + (on ? ' equipped' : '') + (locked ? ' locked' : '') + (it.itemId === popId ? ' pop' : ''));
       card.dataset.kind = it.kind;
       card.dataset.id = it.itemId;
       const pic = el('div', 'art');
       pic.append(art(it));
       card.append(pic, el('h3', '', t.name), el('p', 'sp', t.sub));
-      const price = el('div', 'price' + (mine ? ' mine' : ''));
-      if (it.kind === 'accessory') { price.className = 'price mine'; price.textContent = mine ? 'Yours!' : 'Win it in the Critter Claw'; }
+      const price = el('div', 'price' + (mine || GUEST ? ' mine' : ''));
+      if (GUEST) price.textContent = it.kind === 'accessory' ? 'Claw machine prize' : it.price === 0 ? 'Free for everyone' : 'Costs ' + C.pointsName;
+      else if (it.kind === 'accessory') { price.className = 'price mine'; price.textContent = mine ? 'Yours!' : 'Win it in the Critter Claw'; }
       else if (mine) price.textContent = it.price === 0 ? 'Everyone has this one' : 'Yours!';
       else if (it.basePrice && it.price > it.basePrice) {
         price.innerHTML = GEM + '<span>' + it.price.toLocaleString() + '</span>';
@@ -95,7 +105,12 @@
       card.append(price);
 
       const acts = el('div', 'acts');
-      if (it.kind === 'accessory') {
+      if (GUEST) {
+        // Guests can look at everything, but adopting and wearing need an account.
+        const a = el('a', 'btn btn-soft', it.kind === 'accessory' ? 'Log in to win it' : 'Log in to get it');
+        a.href = 'index.html?login=1&next=shop.html';
+        acts.append(a);
+      } else if (it.kind === 'accessory') {
         const pet = equipped.avatar ? RealmSprites.critter(equipped.avatar) : null;
         if (!mine) { const a = el('a', 'btn btn-soft', 'Try the claw machine'); a.href = 'claw.html'; acts.append(a); }
         else if (on) { acts.append(el('div', 'badge', 'Wearing it')); acts.append(button('Take it off', 'btn-soft btn-small', () => equip(slotOf(it), ''))); }
@@ -168,6 +183,7 @@
   // Explain why prices climb, so a higher number never looks like a glitch.
   function renderGrowthNote() {
     const box = $('#growth');
+    if (GUEST) { box.hidden = true; return; }
     const kind = tab === 'accessory' ? null : tab;
     if (!kind || !growth) { box.hidden = true; return; }
     const have = items.filter(i => i.kind === kind && i.basePrice > 0 && owned.indexOf(i.itemId) >= 0).length;
@@ -181,7 +197,7 @@
   // On the Accessories tab: your avatar wearing everything it has on.
   function renderWearing() {
     const box = $('#wearing');
-    box.hidden = tab !== 'accessory';
+    box.hidden = tab !== 'accessory' || GUEST;
     if (box.hidden) return;
     box.replaceChildren();
     const pet = equipped.avatar ? RealmSprites.critter(equipped.avatar) : null;
@@ -192,6 +208,18 @@
     const won = items.filter(i => i.kind === 'accessory' && owned.indexOf(i.itemId) >= 0).length;
     const total = items.filter(i => i.kind === 'accessory').length;
     box.append(el('p', '', pet.name + "'s outfit. You've won " + won + ' of ' + total + ' accessories.'));
+  }
+
+  if (GUEST) {
+    // The shop list comes from the server, so guests see a built-in copy of it.
+    items = RealmSprites.critters.slice().sort((a, b) => (a.starter ? 1 : 0) - (b.starter ? 1 : 0))
+      .map(c => ({ itemId: c.id, name: c.name, kind: 'critter', price: c.starter ? 0 : 1 }))
+      .concat(['u-sunset', 'u-ocean', 'u-candy', 'u-midnight', 'u-rainbow', 'u-classic'].map(id => ({ itemId: id, name: id, kind: 'unicorn', price: id === 'u-classic' ? 0 : 1 })))
+      .concat(RealmSprites.accessoryIds.map(id => ({ itemId: id, name: id.replace(/^[a-z]+-/, '').replace(/(^|-)([a-z])/g, (m, a, b) => (a ? ' ' : '') + b.toUpperCase()), kind: 'accessory', price: 0 })));
+    owned = []; equipped = {};
+    note('Have a look around! Log in to spend ' + C.pointsName + ' and dress up your own critter.');
+    render();
+    return;
   }
 
   MathRealm.shop().then(d => {

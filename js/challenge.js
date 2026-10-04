@@ -16,6 +16,13 @@
   'use strict';
   if (!MathRealm.requireLogin()) return;
 
+  // Guest mode: a banner on every page, so nobody thinks their work is being saved.
+  (function () {
+    const bar = MathRealm.guestBanner(location.pathname.split('/').pop() + location.search);
+    const slot = document.getElementById('guestSlot');
+    if (bar && slot) slot.append(bar);
+  })();
+
   const GAME_ID = 'challenge';
   const C = window.MATH_REALM_CATALOG;
   const $ = s => document.querySelector(s);
@@ -416,6 +423,16 @@
     const msg = $('#resMsg');
     msg.replaceChildren();
     const line = t => msg.append(el('p', '', t));
+    if (res.guest) {
+      // Guest mode: the round was scored on this computer only.
+      $('#resGems').textContent = '—';
+      $('#resGemsLabel').textContent = 'guest mode';
+      $('#resStars').replaceChildren();
+      line('Nice work! Nothing is saved in guest mode, so no ' + C.pointsName + ' or stars yet.');
+      line('Log in with your class code to start earning ' + C.pointsName + ', stars and golden tickets.');
+      msg.hidden = false;
+      return;
+    }
     if (res.ok) {
       $('#resGems').textContent = '+' + res.points.total;
       $('#resGemsLabel').textContent = C.pointsName + ' (you have ' + Number(res.points.balance).toLocaleString() + ')';
