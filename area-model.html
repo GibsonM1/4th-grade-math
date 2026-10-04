@@ -8,8 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/realm.css">
+<link rel="stylesheet" href="css/area.css">
 <style>
-  .game { max-width: 1000px; margin: 0 auto; padding: 18px 18px 48px; }
+  .game { max-width: 1180px; margin: 0 auto; padding: 18px 18px 48px; }
 
   /* Intro, results, missing */
   .screen-card { max-width: 660px; margin: 18px auto 0; padding: 28px 30px; }
@@ -29,80 +30,6 @@
   /* The problem card */
   .board { padding: 22px 24px 22px; }
   .board[data-state="done"] { box-shadow: 0 8px 0 rgba(16, 8, 46, .35), 0 0 0 5px var(--mint); }
-  .title { margin: 0 0 4px; text-align: center; font: 800 clamp(2.4rem, 7vw, 3.6rem)/1.1 var(--display); color: var(--ink); }
-  .step { min-height: 1.6em; margin: 0 auto 16px; max-width: none; text-align: center; font-weight: 600; color: var(--ink-soft); }
-
-  /* Number boxes */
-  .num {
-    width: 5.4em; padding: 6px 4px; text-align: center;
-    font: 800 1.45rem/1.2 var(--display); color: var(--ink);
-    background: #fff; border: 3px solid var(--card-edge); border-radius: 12px;
-  }
-  .num:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 4px var(--lemon); }
-  .num:disabled { background: rgba(255, 255, 255, .55); border-style: dashed; color: transparent; }
-  .num.ok { color: var(--mint-deep); background: #E7FAF3; border: 3px solid var(--mint); }
-  .num.bad { border-color: var(--bubblegum); background: #FFF0F6; animation: shake .35s; }
-  .num.shown { color: var(--berry); background: #FFF0F6; border: 3px solid var(--bubblegum); }
-  .num.ok:disabled, .num.shown:disabled { border-style: solid; }
-  .num.ok:disabled { color: var(--mint-deep); }
-  .num.shown:disabled { color: var(--berry); }
-  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
-
-  /* Area diagram */
-  .area-wrap { overflow-x: auto; padding-bottom: 4px; }
-  .area { display: grid; gap: 0; width: max-content; min-width: min(100%, 520px); margin: 0 auto; }
-  .edge { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; }
-  .edge .place { margin-bottom: 4px; font: 600 .8rem/1 var(--body); color: var(--violet); }
-  .edge.left { padding-right: 12px; }
-  .edge .given { font: 800 1.6rem/1 var(--display); color: var(--ink); }
-  .region { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border: 3px solid #fff; }
-  .region .expr { font-weight: 600; font-size: .95rem; color: var(--ink-soft); }
-  .region .expr:empty { display: none; }
-  .area .num { width: 100%; max-width: 4.8em; font-size: 1.3rem; }
-  .edge.top { padding: 4px 6px 10px; }
-  .edge.left .num { width: 3.6em; }
-  @media (max-width: 640px) { .area .num { font-size: 1.1rem; } .edge.left .num { width: 3em; } .region { padding: 6px 4px; } }
-  .r0 { background: #E9DDFF; } .r1 { background: #D9F5EB; } .r2 { background: #FFE3EF; } .r3 { background: #FFF2C7; }
-
-  /* The problem written vertically, with place-value columns */
-  .split { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px 30px; align-items: start; }
-  @media (max-width: 900px) { .split { grid-template-columns: 1fr; justify-items: center; } .split .paper-wrap { order: 2; } }
-  .solo { display: flex; justify-content: center; }
-  .paper-wrap { padding: 12px 18px 12px; border-radius: var(--radius-md); background: #F8F5FF; }
-  .paper { --cell: 1.2em; --op: 1.1em; display: grid; justify-content: start; align-items: center; row-gap: 7px; font: 800 1.85rem/1.25 var(--display); color: var(--ink); }
-  .paper .head { text-align: center; font: 600 .8rem/1 var(--body); color: var(--violet); padding-bottom: 2px; }
-  .paper .op { text-align: center; }
-  .paper .drow { display: grid; position: relative; min-height: 1.25em; border-radius: 8px; }
-  .paper .cell { text-align: center; }
-  .paper .cell + .cell { box-shadow: inset 1px 0 0 rgba(108, 79, 179, .14); }   /* faint column guides */
-  .paper .cell.q { color: #CFC3EA; }
-  .paper .rule { border-top: 4px solid var(--ink); margin: 1px 0; }
-  .paper .note { padding-left: 16px; font: 600 1rem/1.2 var(--body); color: var(--ink-soft); white-space: nowrap; }
-  .paper .drow.edit { background: #fff; outline: 3px solid var(--card-edge); outline-offset: 1px; cursor: text; }
-  .paper .drow.edit input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: text; }
-  .paper .drow.edit:focus-within { outline-color: var(--violet); box-shadow: 0 0 0 7px var(--lemon); }
-  .paper .drow.edit.waiting { background: transparent; outline: 3px dashed #DED4EF; }
-  .paper .drow.ok { background: #E7FAF3; outline-color: var(--mint); color: var(--mint-deep); }
-  .paper .drow.shown { background: #FFF0F6; outline-color: var(--bubblegum); color: var(--berry); }
-  .paper .drow.bad { background: #FFF0F6; outline-color: var(--bubblegum); animation: shake .35s; }
-  .key { margin: 10px 0 0; max-width: 24ch; font-size: .8rem; line-height: 1.35; color: var(--ink-soft); }
-  @media (max-width: 640px) { .paper { font-size: 1.5rem; } }
-
-  /* Stacked partial products */
-  .stack { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; gap: 8px 16px; font: 800 1.6rem/1.2 var(--display); color: var(--ink); }
-  .stack .n { text-align: right; padding-right: 6px; }
-  .stack .rule { grid-column: 1 / 2; border-top: 4px solid var(--ink); margin: 2px 0; }
-  .stack .note { font: 600 1rem/1.2 var(--body); color: var(--ink-soft); }
-  .stack .num { text-align: right; padding-right: 12px; }
-
-  /* Single answer (tens skill) */
-  .single { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em; font: 800 clamp(2.4rem, 7vw, 3.6rem)/1.1 var(--display); color: var(--ink); }
-  .single .num { font-size: clamp(2rem, 6vw, 3rem); width: 4.2em; }
-
-  /* Adding the parts */
-  .sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; margin-top: 18px; font: 800 1.4rem/1.2 var(--display); color: var(--ink); }
-  .sum .part { min-width: 2ch; text-align: center; }
-  .sum .part.wait { color: #CFC3EA; }
 
   .help { margin: 18px 0 0; padding: 14px 16px; border-radius: var(--radius-md); background: #F7F3FF; color: var(--ink); }
   .help p { margin: 0 auto; max-width: 60ch; text-align: center; }
@@ -124,6 +51,7 @@
   .ticket-wrap .ticket::before, .ticket-wrap .ticket::after { background: var(--card); }
   .ticket-wrap p { margin: 0; color: var(--ink); font-weight: 600; max-width: 30ch; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+  .link-btn { color: var(--violet); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -155,6 +83,7 @@
         <p id="ruleStar"></p>
       </div>
       <button class="btn btn-big" type="button" id="startBtn">Start</button>
+      <p style="margin:14px 0 0"><a class="link-btn" id="demoLink" href="how-it-works.html">See how it works (a step-by-step demo, great for grown-ups too)</a></p>
     </section>
   </main>
 
@@ -164,7 +93,7 @@
       <span class="count" id="count" aria-live="polite"></span>
     </div>
     <section class="board card" id="board">
-      <h2 class="title" id="title"></h2>
+      <h2 class="problem-title" id="title"></h2>
       <p class="step" id="step" aria-live="polite"></p>
       <div id="work"></div>
       <div class="help" id="help" hidden></div>
@@ -206,6 +135,7 @@
 <script src="js/catalog.js"></script>
 <script src="js/api.js"></script>
 <script src="js/fx.js"></script>
+<script src="js/area-core.js"></script>
 <script src="js/area-model.js"></script>
 </body>
 </html>
