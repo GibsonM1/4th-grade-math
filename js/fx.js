@@ -4,6 +4,8 @@
  *   RealmFX.correct()  RealmFX.wrong()  RealmFX.fanfare()  RealmFX.confetti()
  *   RealmFX.soundOn / RealmFX.toggleSound()        sound effects start OFF
  *   RealmMusic.on   / RealmMusic.toggle()          music starts ON (after the first click)
+ *   RealmMusic.setTheme('race')                    pick the music for a page: 'calm' (default) or 'race'
+ *   RealmFX.gallop(ms)                             hoofbeats while a unicorn runs
  *
  * The music is original and made in the browser: a slow, dreamy chord loop
  * with a soft music-box melody and the odd sparkle. Nothing is downloaded.
@@ -32,6 +34,16 @@
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
   const hz = midi => 440 * Math.pow(2, (midi - 69) / 12);
+
+  let noiseBuf = null;
+  function noiseBuffer(a) {
+    if (noiseBuf && noiseBuf.sampleRate === a.sampleRate) return noiseBuf;
+    const b = a.createBuffer(1, a.sampleRate, a.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuf = b;
+    return b;
+  }
 
   /* ── Sound effects ── */
 
@@ -71,6 +83,30 @@
       note(311, 0, 0.22, 'sine', 0.08);
       note(262, 0.12, 0.3, 'sine', 0.08);
     },
+    gallop(ms) {
+      if (!soundOn) return;
+      const a = audio();
+      if (!a) return;
+      const noise = noiseBuffer(a);
+      const beats = Math.max(1, Math.round(ms / 360));
+      for (let i = 0; i < beats; i++) {
+        [0, 0.085, 0.17].forEach((off, k) => {   // da-da-dum, like hooves
+          const t = a.currentTime + i * 0.36 + off;
+          const src = a.createBufferSource();
+          src.buffer = noise;
+          const bp = a.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.value = k === 2 ? 900 : 1300;
+          bp.Q.value = 6;
+          const g = a.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(k === 2 ? 0.5 : 0.32, t + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+          src.connect(bp).connect(g).connect(a.destination);
+          src.start(t, Math.random() * 0.5, 0.1);
+        });
+      }
+    },
     fanfare() {
       if (!soundOn) return;
       [523.3, 659.3, 784, 1046.5].forEach((f, i) => note(f, i * 0.11, 0.35, 'triangle', 0.1));
@@ -101,22 +137,31 @@
 
   /* ── Background music ── */
 
-  const BPM = 72;
-  const STEP = 60 / BPM / 2;     // eighth notes
-  // D major, two 4-bar phrases: D A Bm G | Bm G D A
-  const CHORDS = [[62, 66, 69], [57, 61, 64], [59, 62, 66], [55, 59, 62], [59, 62, 66], [55, 59, 62], [62, 66, 69], [57, 61, 64]];
-  // Music-box patterns over one bar (8 eighth notes). Numbers pick chord tones; 3-5 are an octave up; null is a rest.
-  const PATTERNS = [
-    [0, 1, 2, 4, 2, 1, null, null],
-    [0, null, 2, null, 3, null, 2, 1],
-    [2, 1, 0, null, 1, 2, 4, null],
-    [null, 0, 1, 2, null, 2, 1, null],
-    [0, 2, 4, 5, 4, 2, null, null],
-  ];
-  const SPARKLE = [86, 88, 90, 93, 95, 98];   // D major pentatonic, way up high
+  // Music themes. Chords are MIDI notes; patterns pick chord tones over one bar of
+  // 8 eighth notes (3-5 are an octave up, null is a rest).
+  const THEMES = {
+    // Fact Garden and Rectangle Kingdom: slow, dreamy, music-box
+    calm: {
+      bpm: 72, restChance: 0.25, sparkleRate: 0.08, padVol: 0.05, arpVol: 0.03, bassVol: 0.07, drums: false,
+      // D major, two 4-bar phrases: D A Bm G | Bm G D A
+      chords: [[62, 66, 69], [57, 61, 64], [59, 62, 66], [55, 59, 62], [59, 62, 66], [55, 59, 62], [62, 66, 69], [57, 61, 64]],
+      patterns: [[0, 1, 2, 4, 2, 1, null, null], [0, null, 2, null, 3, null, 2, 1], [2, 1, 0, null, 1, 2, 4, null], [null, 0, 1, 2, null, 2, 1, null], [0, 2, 4, 5, 4, 2, null, null]],
+      sparkle: [86, 88, 90, 93, 95, 98],
+    },
+    // Unicorn Racetrack: a bit quicker and more magical. D Lydian (the E major chord,
+    // with its G sharp, gives the "enchanted" sound), a running harp, a soft heartbeat.
+    race: {
+      bpm: 100, restChance: 0, sparkleRate: 0.14, padVol: 0.032, arpVol: 0.026, bassVol: 0.06, drums: true,
+      chords: [[62, 66, 69], [64, 68, 71], [59, 62, 66], [57, 61, 64], [55, 59, 62], [64, 68, 71], [62, 66, 69], [57, 61, 64]],
+      patterns: [[0, 1, 2, 4, 3, 4, 2, 1], [0, 2, 4, 5, 4, 2, 1, 2], [2, 1, 0, 1, 2, 4, 5, 4], [0, 1, 2, 3, 4, 3, 2, 1]],
+      sparkle: [86, 88, 90, 92, 93, 95],
+    },
+  };
+  let theme = THEMES.calm;
+  const stepLen = () => 60 / theme.bpm / 2;   // eighth notes
 
   let musicOn = pref('mathRealm.music', true);
-  let playing = false, timer = null, nextAt = 0, step = 0, pattern = PATTERNS[0];
+  let playing = false, timer = null, nextAt = 0, step = 0, pattern = null;
   let bus = null;
 
   function buildBus(a) {
@@ -156,27 +201,58 @@
     osc.stop(at + dur + 0.1);
   }
 
+  function kick(a, at) {
+    const osc = a.createOscillator(), g = a.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(130, at);
+    osc.frequency.exponentialRampToValueAtTime(45, at + 0.12);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.11, at + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+    osc.connect(g).connect(bus.input);
+    osc.start(at);
+    osc.stop(at + 0.3);
+  }
+  function shaker(a, at, vol) {
+    const src = a.createBufferSource(), hp = a.createBiquadFilter(), g = a.createGain();
+    src.buffer = noiseBuffer(a);
+    hp.type = 'highpass';
+    hp.frequency.value = 6500;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+    src.connect(hp).connect(g).connect(bus.input);
+    src.start(at, Math.random() * 0.5, 0.08);
+  }
+
   function schedule(a, s, at) {
-    const bar = Math.floor(s / 8) % CHORDS.length;
+    const T = theme;
+    const bar = Math.floor(s / 8) % T.chords.length;
     const beat = s % 8;
-    const chord = CHORDS[bar];
+    const chord = T.chords[bar];
     if (beat === 0) {
-      pattern = Math.random() < 0.25 ? null : PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
-      const barLen = STEP * 8;
+      pattern = Math.random() < T.restChance ? null : T.patterns[Math.floor(Math.random() * T.patterns.length)];
+      const barLen = stepLen() * 8;
       chord.forEach(m => {                       // soft pad
-        voice(a, hz(m), at, barLen + 1.6, { type: 'sine', vol: 0.05, attack: 1.0, hold: barLen - 0.2 });
-        voice(a, hz(m), at, barLen + 1.6, { type: 'triangle', vol: 0.018, attack: 1.2, hold: barLen - 0.2, detune: 6 });
+        voice(a, hz(m), at, barLen + 1.6, { type: 'sine', vol: T.padVol, attack: 1.0, hold: barLen - 0.2 });
+        voice(a, hz(m), at, barLen + 1.6, { type: 'triangle', vol: T.padVol * 0.36, attack: 1.2, hold: barLen - 0.2, detune: 6 });
       });
-      voice(a, hz(chord[0] - 24), at, 2.4, { type: 'sine', vol: 0.07, attack: 0.05 });   // low root
+      voice(a, hz(chord[0] - 24), at, 2.4, { type: 'sine', vol: T.bassVol, attack: 0.05 });   // low root
     }
-    if (beat === 4) voice(a, hz(chord[0] - 24), at, 1.8, { type: 'sine', vol: 0.045, attack: 0.05 });
-    if (pattern && pattern[beat] != null) {      // music box
+    if (beat === 4) voice(a, hz(chord[0] - 24), at, 1.8, { type: 'sine', vol: T.bassVol * 0.65, attack: 0.05 });
+    if (T.drums) {
+      if (beat === 0 || beat === 4) kick(a, at);
+      if (beat === 6 && Math.random() < 0.5) kick(a, at);
+      if (beat % 2 === 1) shaker(a, at, 0.018);
+      else shaker(a, at, 0.008);
+    }
+    if (pattern && pattern[beat] != null) {      // music box / harp
       const i = pattern[beat];
       const m = chord[i % 3] + 12 + (i >= 3 ? 12 : 0);
-      voice(a, hz(m), at, 0.9, { type: 'triangle', vol: 0.03, attack: 0.008 });
+      voice(a, hz(m), at, T.drums ? 0.6 : 0.9, { type: 'triangle', vol: T.arpVol, attack: 0.008 });
     }
-    if (beat % 2 === 1 && Math.random() < 0.08) {  // the odd sparkle
-      voice(a, hz(SPARKLE[Math.floor(Math.random() * SPARKLE.length)]), at, 1.4, { type: 'sine', vol: 0.014, attack: 0.005 });
+    if (beat % 2 === 1 && Math.random() < T.sparkleRate) {  // the odd sparkle
+      voice(a, hz(T.sparkle[Math.floor(Math.random() * T.sparkle.length)]), at, 1.4, { type: 'sine', vol: 0.014, attack: 0.005 });
     }
   }
 
@@ -185,7 +261,7 @@
     if (!a || !playing) return;
     while (nextAt < a.currentTime + 0.25) {
       schedule(a, step, nextAt);
-      nextAt += STEP;
+      nextAt += stepLen();
       step++;
     }
   }
@@ -233,15 +309,17 @@
 
   window.RealmMusic = {
     get on() { return musicOn; },
+    setTheme(name) { if (THEMES[name]) theme = THEMES[name]; },
     // Renders the music offline (used to make a preview recording).
-    renderPreview(seconds) {
+    renderPreview(seconds, name) {
+      if (name) this.setTheme(name);
       const Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
       const off = new Off(2, Math.ceil(44100 * seconds), 44100);
       const saved = bus;
       bus = buildBus(off);
       bus.master.gain.setValueAtTime(0.0001, 0);
       bus.master.gain.exponentialRampToValueAtTime(0.8, 2.5);
-      for (let s = 0, at = 0.1; at < seconds - 2; s++, at += STEP) schedule(off, s, at);
+      for (let s = 0, at = 0.1; at < seconds - 2; s++, at += stepLen()) schedule(off, s, at);
       bus = saved;
       return off.startRendering();
     },
