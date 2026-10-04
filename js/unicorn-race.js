@@ -30,7 +30,8 @@
     'g4.dec.hundredths': { kind: 'hundredths', step: 1,  finish: 300, view: 100, places: 2, boost: 5 },
     'g4.dec.mixed':      { kind: 'mixed',      step: 1,  finish: 300, view: 100, places: 2, boost: 5 },
   };
-  const ME = { body: '#FFFFFF', mane: '#FF7EB6', mane2: '#C9A8FF' };
+  // The student's unicorn wears the style they picked in the Sprite Shop.
+  const ME = RealmSprites.unicornStyle(((MathRealm.session || {}).shop || {}).equipped ? MathRealm.session.shop.equipped.unicorn : null);
   const CPU = { body: '#EAF4FF', mane: '#4FD1AB', mane2: '#7CC8FF' };
 
   const session = MathRealm.session;
@@ -120,13 +121,14 @@
     [-24, -12, 12, 24].forEach(x => legs.append(S('rect', { x: x - 3.5, y: -24, width: 7, height: 24, rx: 3.5, fill: pal.body, stroke: INK, 'stroke-width': 2 })));
     bob.append(legs);
     bob.append(S('path', { d: 'M-26,-38 C-46,-42 -52,-22 -42,-10 C-40,-24 -34,-28 -24,-30 Z', fill: pal.mane, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    (pal.stripes || []).forEach((c, i) => bob.append(S('path', { d: 'M' + (-27 - i * 2) + ',' + (-36 + i) + ' C' + (-40 - i * 2) + ',' + (-38 + i * 2) + ' ' + (-45 + i) + ',' + (-26 + i * 2) + ' ' + (-41 + i * 2) + ',' + (-15 + i), fill: 'none', stroke: c, 'stroke-width': 3, 'stroke-linecap': 'round' })));
     bob.append(S('ellipse', { cx: 0, cy: -36, rx: 30, ry: 16, fill: pal.body, stroke: INK, 'stroke-width': 2 }));
     bob.append(S('path', { d: 'M14,-44 C18,-58 22,-64 28,-68 L40,-60 C33,-54 29,-46 27,-34 Z', fill: pal.body, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
     bob.append(S('path', { d: 'M25,-72 C33,-80 49,-76 54,-65 C56,-58 50,-55 43,-57 L30,-56 Z', fill: pal.body, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
     bob.append(S('path', { d: 'M29,-74 L31,-85 L37,-75 Z', fill: pal.body, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
     bob.append(S('path', { d: 'M27,-74 C15,-72 18,-62 9,-58 C16,-56 11,-48 5,-45 C12,-45 18,-49 22,-52 C19,-58 25,-64 31,-68 Z', fill: pal.mane2, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-    bob.append(S('path', { d: 'M37,-76 L46,-98 L42,-74 Z', fill: '#FFD84D', stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-    bob.append(S('circle', { cx: 42, cy: -66, r: 2.4, fill: INK }));
+    bob.append(S('path', { d: 'M37,-76 L46,-98 L42,-74 Z', fill: pal.horn || '#FFD84D', stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    bob.append(S('circle', { cx: 42, cy: -66, r: 2.4, fill: pal.eye || INK }));
     bob.append(S('ellipse', { cx: 47, cy: -60, rx: 3.2, ry: 2, fill: '#FF9CC8', opacity: 0.85 }));
     g.append(bob);
     if (name) {   // a racing bib on the saddle
