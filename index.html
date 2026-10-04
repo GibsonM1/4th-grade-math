@@ -33,7 +33,32 @@
   .shelf p { margin: 4px 0 14px; color: var(--haze); }
   .tickets { display: flex; flex-wrap: wrap; gap: 14px 22px; padding-left: 10px; }
 
-  .how { margin: 0 0 16px; color: var(--haze); }
+  .how { margin: 16px 0 16px; color: var(--haze); }
+  .section-title { margin: 6px 0 14px; font-size: 1.6rem; }
+
+  /* Up next: one suggestion, so nobody has to choose from everything */
+  .next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-bottom: 28px; padding: 18px 22px; }
+  .next .label { margin: 0 0 2px; font-weight: 600; color: var(--violet); }
+  .next h2 { font-size: 1.6rem; color: var(--ink); }
+  .next .where { margin: 2px 0 6px; color: var(--ink-soft); }
+  .next .btn { font-size: 1.15rem; padding: 14px 28px; }
+
+  /* Area tiles: one per area, with progress */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 20px; }
+  .tile { display: flex; flex-direction: column; overflow: hidden; color: var(--ink); text-decoration: none; transition: transform .15s ease; }
+  .tile:hover { transform: translateY(-3px); }
+  .tile[data-accent="mint"]  { --accent: var(--mint-deep);  --wash: #E2F8F0; }
+  .tile[data-accent="berry"] { --accent: var(--berry);      --wash: #FFEAF3; }
+  .tile[data-accent="sky"]   { --accent: var(--sky-deep);   --wash: #E5F2FF; }
+  .tile .band { flex: 1 1 auto; padding: 18px 20px 14px; background: var(--wash); border-bottom: 3px dashed var(--accent); }   /* grows so meters line up */
+  .tile h3 { font-size: 1.65rem; color: var(--accent); }
+  .tile .band p { margin: 4px 0 0; color: var(--ink-soft); }
+  .tile .body { display: flex; flex-direction: column; gap: 8px; padding: 14px 20px 18px; }
+  .meter { height: 12px; border-radius: 999px; background: #F1EBFB; overflow: hidden; }
+  .meter span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--lemon), var(--gold)); }
+  .tile .stat { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; font-size: .95rem; }
+  .tile .go { align-self: flex-end; margin-top: 4px; font-weight: 600; color: var(--accent); }
+  .back { margin-bottom: 4px; }
   .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 24px; align-items: start; }
   .zone { overflow: hidden; }
   .zone[data-accent="mint"]  { --accent: var(--mint-deep);  --wash: #E2F8F0; }
@@ -99,8 +124,21 @@
       <div class="tickets" id="tickets"></div>
     </section>
 
-    <p class="how">Every great round earns a star for that day. Fill all the stars to master a skill!</p>
-    <div class="zones" id="zones"></div>
+    <section class="next card" id="nextUp" hidden aria-labelledby="nextTitle"></section>
+
+    <div id="tilesView">
+      <h2 class="section-title">Where to?</h2>
+      <div class="tiles" id="tiles"></div>
+    </div>
+
+    <div id="areaView" hidden>
+      <a class="pill back" href="#" id="allAreas">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        All areas
+      </a>
+      <p class="how">Every great round earns a star for that day. Fill all the stars to master a skill!</p>
+      <div class="zones" id="zones"></div>
+    </div>
   </main>
 </div>
 
@@ -193,7 +231,7 @@
     document.body.classList.remove('twinkle');
     $('#loginView').hidden = true;
     $('#hubView').hidden = false;
-    if (location.search) history.replaceState(null, '', location.pathname);
+    if (location.search) history.replaceState(null, '', location.pathname + location.hash);
     render(celebrate);
   }
 
@@ -204,7 +242,7 @@
     $('#gemCount').textContent = Number(s.student.points || 0).toLocaleString();
     $('#gems').setAttribute('aria-label', s.student.points + ' ' + C.pointsName);
     renderTickets(s.tickets || []);
-    renderZones(s, celebrate);
+    renderMap(s, celebrate);
     renderPending();
   }
 
@@ -247,14 +285,88 @@
     return row;
   }
 
-  function renderZones(s, celebrate) {
+  // The map: tiles for each area, or one area's full skill list (#area-0, #area-1, ...)
+  function currentArea(zones) {
+    const m = /^#area-(\d+)$/.exec(location.hash);
+    return m && zones[Number(m[1])] ? Number(m[1]) : null;
+  }
+
+  function starsFor(s, k) {
+    const m = s.mastery[k.skillId] || { status: '', days: 0 };
+    return m.status === 'mastered' ? k.daysNeeded : Math.min(m.days || 0, k.daysNeeded);
+  }
+
+  function renderMap(s, celebrate) {
+    const zones = zonesFor(s.skills || []);
+    const open = currentArea(zones);
+    $('#tilesView').hidden = open !== null;
+    $('#areaView').hidden = open === null;
+    renderNext(s, zones, open === null);
+    if (open !== null) { renderZones(s, celebrate, zones[open]); return; }
+
+    const box = $('#tiles');
+    box.replaceChildren();
+    zones.forEach((z, i) => {
+      const t = el('a', 'tile card');
+      t.href = '#area-' + i;
+      t.dataset.accent = z.accent || 'sky';
+      const band = el('div', 'band');
+      band.append(el('h3', '', z.title));
+      if (z.blurb) band.append(el('p', '', z.blurb));
+      const body = el('div', 'body');
+      const have = z.skills.reduce((n, k) => n + starsFor(s, k), 0);
+      const need = z.skills.reduce((n, k) => n + k.daysNeeded, 0);
+      const mastered = z.skills.filter(k => (s.mastery[k.skillId] || {}).status === 'mastered').length;
+      const meter = el('div', 'meter');
+      meter.setAttribute('role', 'img');
+      meter.setAttribute('aria-label', have + ' of ' + need + ' stars');
+      const fill = el('span');
+      fill.style.width = (need ? Math.round(100 * have / need) : 0) + '%';
+      meter.append(fill);
+      const stat = el('div', 'stat');
+      stat.append(el('span', '', have + ' of ' + need + ' stars'), el('span', '', mastered + ' of ' + z.skills.length + ' mastered'));
+      body.append(meter, stat, el('span', 'go', 'Open ›'));
+      t.append(band, body);
+      box.append(t);
+    });
+  }
+
+  // Suggest one thing to do: a skill already started (not mastered) comes first,
+  // then the first skill not started yet. Only shown on the map, not inside an area.
+  function renderNext(s, zones, onMap) {
+    const box = $('#nextUp');
+    let pick = null, zoneTitle = '';
+    const playable = k => { const g = gameFor(k.skillId); return g && g.ready; };
+    for (const pass of ['practicing', 'learning', '']) {
+      for (const z of zones) {
+        const k = z.skills.find(x => playable(x) && ((s.mastery[x.skillId] || {}).status || '') === pass);
+        if (k) { pick = k; zoneTitle = z.title; break; }
+      }
+      if (pick) break;
+    }
+    box.hidden = !onMap || !pick;
+    if (!pick || !onMap) return;
+    box.replaceChildren();
+    const left = el('div');
+    left.append(el('p', 'label', 'Up next'));
+    const h = el('h2', '', pick.name);
+    h.id = 'nextTitle';
+    left.append(h, el('p', 'where', zoneTitle));
+    const m = s.mastery[pick.skillId] || {};
+    left.append(starRow(Math.min(m.days || 0, pick.daysNeeded), pick.daysNeeded, false, false));
+    const go = el('a', 'btn', 'Play');
+    go.href = gameFor(pick.skillId).page + '?skill=' + encodeURIComponent(pick.skillId);
+    box.append(left, go);
+  }
+
+  function renderZones(s, celebrate, only) {
     const wrap = $('#zones');
     wrap.replaceChildren();
     if (!s.skills || !s.skills.length) {
       wrap.append(el('p', 'how', 'No games are set up yet. Tell your teacher.'));
       return;
     }
-    zonesFor(s.skills).forEach(z => {
+    (only ? [only] : zonesFor(s.skills)).forEach(z => {
       const card = el('section', 'zone card');
       card.dataset.accent = z.accent || 'sky';
       const head = el('header', 'zone-head');
@@ -321,6 +433,8 @@
     showLogin('');
   });
 
+  window.addEventListener('hashchange', () => { if (MathRealm.isLoggedIn()) { render(false); window.scrollTo(0, 0); } });
+  $('#allAreas').addEventListener('click', e => { e.preventDefault(); history.pushState(null, '', location.pathname); render(false); });
   window.addEventListener('online', () => setTimeout(() => MathRealm.flushPending().then(() => render(false)), 500));
 
   /* ── Start ── */
