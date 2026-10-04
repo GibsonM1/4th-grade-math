@@ -42,6 +42,7 @@
   .zone-head { padding: 20px 24px 16px; background: var(--wash); border-bottom: 3px dashed var(--accent); }
   .zone-head h2 { font-size: 1.85rem; color: var(--accent); }
   .zone-head p { margin: 4px 0 0; color: var(--ink-soft); }
+  .zone-head .zone-link { margin-top: 12px; }
   .skills { list-style: none; margin: 0; padding: 4px 16px 12px; }
   .skill { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px 14px; padding: 13px 6px; border-bottom: 2px solid #F1EBFB; }
   .skill:last-child { border-bottom: 0; }
@@ -259,6 +260,11 @@
       const head = el('header', 'zone-head');
       head.append(el('h2', '', z.title));
       if (z.blurb) head.append(el('p', '', z.blurb));
+      if (z.link) {
+        const a = el('a', 'btn btn-small zone-link', z.link.label);
+        a.href = z.link.page;
+        head.append(a);
+      }
       const list = el('ul', 'skills');
 
       z.skills.forEach(k => {
