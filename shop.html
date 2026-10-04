@@ -45,6 +45,8 @@
   .wearing { display: flex; align-items: center; gap: 16px; margin: 0 0 16px; padding: 12px 18px; }
   .wearing svg { width: 90px; height: 98px; overflow: visible; }
   .wearing p { margin: 0; color: var(--ink); }
+  .growth { margin: -6px 0 16px; padding: 0 4px; color: var(--haze); font-size: .95rem; max-width: 70ch; }
+  .price .was { margin-left: 6px; font: 600 .8rem/1 var(--body); color: var(--ink-soft); text-decoration: line-through; }
   .item.pop .art svg { animation: adopt .7s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes adopt { from { transform: scale(.4) rotate(-10deg); } to { transform: none; } }
 </style>
@@ -96,6 +98,7 @@
     <button type="button" role="tab" id="tabAcc" aria-selected="false">Accessories</button>
   </div>
   <p class="note" id="note" aria-live="polite">Opening the shop…</p>
+  <p class="growth" id="growth" hidden></p>
   <section class="wearing card" id="wearing" hidden></section>
   <div class="grid" id="grid"></div>
 </div>

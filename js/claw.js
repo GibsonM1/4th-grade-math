@@ -150,9 +150,10 @@
 
   function renderPanel() {
     const winRate = Number(claw.winRate) || 0;
-    $('#odds').textContent = winRate > 0
-      ? 'Each try costs ' + claw.cost + ' ' + C.pointsName + '. About 1 in ' + Math.round(1 / winRate) + ' grabs wins a prize. Grabbing nothing never wins, so aim carefully!'
-      : 'Each try costs ' + claw.cost + ' ' + C.pointsName + '.';
+    const grow = Number(claw.growth) || 0;
+    $('#odds').textContent = 'Each try costs ' + claw.cost + ' ' + C.pointsName + '.'
+      + (winRate > 0 ? ' About 1 in ' + Math.round(1 / winRate) + ' grabs wins a prize. Grabbing nothing never wins, so aim carefully!' : '')
+      + (grow ? ' Every prize you win adds ' + grow + ' to the cost of the next try.' : '');
     const pity = Number(claw.pityAfter) || 0;
     $('#luckyBox').hidden = !pity;
     if (pity) {
@@ -241,6 +242,7 @@
     setGems(res.balance);
     owned = res.owned; equipped = res.equipped;
     claw.misses = res.misses; claw.playsLeft = res.playsLeft;
+    if (res.nextCost) claw.cost = res.nextCost;
 
     if (res.win) await winRun(target, depth, res.item);
     else await loseRun(target, depth);

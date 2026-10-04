@@ -23,7 +23,7 @@
   });
   const $ = s => document.querySelector(s);
   const GEM = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#2A1F45" stroke-width="2" stroke-linejoin="round"/></svg>';
-  let items = [], owned = [], equipped = {}, balance = 0, tab = 'critter', asking = null, busy = false;
+  let items = [], owned = [], equipped = {}, balance = 0, tab = 'critter', asking = null, busy = false, growth = 0;
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -72,6 +72,7 @@
     $('#tabUnicorns').setAttribute('aria-selected', String(tab === 'unicorn'));
     $('#tabAcc').setAttribute('aria-selected', String(tab === 'accessory'));
     renderWearing();
+    renderGrowthNote();
     const grid = $('#grid');
     grid.replaceChildren();
     items.filter(it => it.kind === tab && art(it)).forEach(it => {
@@ -86,6 +87,10 @@
       const price = el('div', 'price' + (mine ? ' mine' : ''));
       if (it.kind === 'accessory') { price.className = 'price mine'; price.textContent = mine ? 'Yours!' : 'Win it in the Critter Claw'; }
       else if (mine) price.textContent = it.price === 0 ? 'Everyone has this one' : 'Yours!';
+      else if (it.basePrice && it.price > it.basePrice) {
+        price.innerHTML = GEM + '<span>' + it.price.toLocaleString() + '</span>';
+        price.append(el('span', 'was', 'was ' + it.basePrice.toLocaleString()));
+      }
       else price.innerHTML = GEM + '<span>' + it.price.toLocaleString() + '</span>';
       card.append(price);
 
@@ -128,6 +133,7 @@
     if (!d.ok) { note(MathRealm.errorMessage(d.error, true)); render(); return; }
     owned = d.owned;
     equipped = d.equipped;
+    if (d.items) items = d.items.slice().sort((a, b) => ((a.price === 0) - (b.price === 0)) || (a.basePrice || a.price) - (b.basePrice || b.price));   // prices went up
     setGems(d.balance);
     const t = title(it);
     note(it.kind === 'critter'
@@ -159,6 +165,19 @@
   $('#tabUnicorns').addEventListener('click', () => { tab = 'unicorn'; asking = null; render(); });
   $('#tabAcc').addEventListener('click', () => { tab = 'accessory'; asking = null; render(); });
 
+  // Explain why prices climb, so a higher number never looks like a glitch.
+  function renderGrowthNote() {
+    const box = $('#growth');
+    const kind = tab === 'accessory' ? null : tab;
+    if (!kind || !growth) { box.hidden = true; return; }
+    const have = items.filter(i => i.kind === kind && i.basePrice > 0 && owned.indexOf(i.itemId) >= 0).length;
+    box.hidden = false;
+    box.textContent = have
+      ? 'You have ' + have + ' ' + (kind === 'critter' ? (have === 1 ? 'critter' : 'critters') : (have === 1 ? 'unicorn style' : 'unicorn styles')) +
+        ', so these cost ' + Math.round(growth * have * 100) + '% more than their starting price. The more you collect, the more the next one costs!'
+      : 'Every one of these you collect makes the rest cost a little more, so keep earning ' + C.pointsName + '!';
+  }
+
   // On the Accessories tab: your avatar wearing everything it has on.
   function renderWearing() {
     const box = $('#wearing');
@@ -178,7 +197,8 @@
   MathRealm.shop().then(d => {
     if (!d.ok) { note(MathRealm.errorMessage(d.error, true)); return; }
     // Things to buy first (cheapest first), then the free starters. Sorted once, so cards don't jump after a purchase.
-    items = d.items.slice().sort((a, b) => ((a.price === 0) - (b.price === 0)) || a.price - b.price);
+    growth = Number(d.priceGrowth) || 0;
+    items = d.items.slice().sort((a, b) => ((a.price === 0) - (b.price === 0)) || (a.basePrice || a.price) - (b.basePrice || b.price));
     owned = d.owned;
     equipped = d.equipped;
     setGems(d.balance);

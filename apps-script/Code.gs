@@ -2,7 +2,7 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.4.0 (adds the claw machine and critter accessories)
+ * Version 1.5.0 (higher shop prices that rise as a student's collection grows)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -30,7 +30,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -63,10 +63,12 @@ const DEFAULT_SETTINGS = [
   ['maxAttemptsPerRound',    60,   'Answers past this number in one round are ignored'],
   ['failedLoginsPerStudent', 8,    'Wrong tries before that student ID is locked for 10 minutes'],
   ['failedLoginsPerClass',   60,   'Failed tries on one class code before the whole class code is locked for 10 minutes'],
-  ['clawCost',               40,   'Gems for one try at the claw machine'],
+  ['clawCost',               100,  'Gems for one try at the claw machine'],
   ['clawWinRate',            0.1,  'Chance a grab wins (0.1 = about 1 in 10)'],
   ['clawPityAfter',          12,   'Lucky meter: a guaranteed prize after this many misses in a row (0 = off)'],
   ['clawDailyLimit',         10,   'Most claw machine tries per student per day (0 = no limit)'],
+  ['clawCostGrowth',         5,    'Gems added to the claw machine cost for each accessory already won (0 = always the same)'],
+  ['priceGrowth',            0.2,  'Each item a student owns raises the price of the others of that kind by this much of their base price (0.2 = +20%; 0 = fixed prices)'],
 ];
 
 // skillId, name, zone, minItems, minAccuracy, maxMedianMs (blank = no speed check), daysNeeded, milestone (golden ticket)
@@ -105,20 +107,20 @@ const DEFAULT_SHOP = [
   ['pip',      'Pip the puppy',             'critter', 0],
   ['miso',     'Miso the kitten',           'critter', 0],
   ['shelly',   'Shelly the turtle',         'critter', 0],
-  ['ember',    'Ember the fox',             'critter', 150],
-  ['biscuit',  'Biscuit the hamster',       'critter', 150],
-  ['lily',     'Lily the frog',             'critter', 200],
-  ['hoot',     'Hoot the owl',              'critter', 200],
-  ['prickles', 'Prickles the hedgehog',     'critter', 250],
-  ['bao',      'Bao the panda',             'critter', 300],
-  ['mochi',    'Mochi the axolotl',         'critter', 350],
-  ['sparky',   'Sparky the baby dragon',    'critter', 500],
+  ['ember',    'Ember the fox',             'critter', 400],
+  ['biscuit',  'Biscuit the hamster',       'critter', 400],
+  ['lily',     'Lily the frog',             'critter', 500],
+  ['hoot',     'Hoot the owl',              'critter', 500],
+  ['prickles', 'Prickles the hedgehog',     'critter', 650],
+  ['bao',      'Bao the panda',             'critter', 800],
+  ['mochi',    'Mochi the axolotl',         'critter', 950],
+  ['sparky',   'Sparky the baby dragon',    'critter', 1400],
   ['u-classic',  'Classic unicorn',         'unicorn', 0],
-  ['u-sunset',   'Sunset unicorn',          'unicorn', 200],
-  ['u-ocean',    'Ocean unicorn',           'unicorn', 200],
-  ['u-candy',    'Cotton candy unicorn',    'unicorn', 300],
-  ['u-midnight', 'Midnight unicorn',        'unicorn', 300],
-  ['u-rainbow',  'Rainbow unicorn',         'unicorn', 500],
+  ['u-sunset',   'Sunset unicorn',          'unicorn', 500],
+  ['u-ocean',    'Ocean unicorn',           'unicorn', 500],
+  ['u-candy',    'Cotton candy unicorn',    'unicorn', 800],
+  ['u-midnight', 'Midnight unicorn',        'unicorn', 800],
+  ['u-rainbow',  'Rainbow unicorn',         'unicorn', 1400],
   // Accessories are claw machine prizes only. The part before the dash is the slot they go in.
   ['hat-crown',      'Sparkle crown',        'accessory', 0],
   ['hat-bow',        'Big pink bow',         'accessory', 0],
@@ -396,6 +398,25 @@ function loadState_(req) {
 
 /* ───────────── Sprite Shop ───────────── */
 
+// What an item costs this student right now: the base price plus priceGrowth of it
+// for every paid item of the same kind they already own. Free starters never count.
+function pricedFor_(items, owned) {
+  const S = settings_();
+  const growth = Math.max(0, num_(S.priceGrowth));
+  const have = {};
+  items.forEach(i => { if (i.price > 0 && owned.indexOf(i.itemId) >= 0) have[i.kind] = (have[i.kind] || 0) + 1; });
+  return items.map(i => Object.assign({}, i, {
+    basePrice: i.price,
+    price: i.price > 0 ? Math.round(i.price * (1 + growth * (have[i.kind] || 0))) : 0,
+  }));
+}
+
+function clawCostFor_(owned) {
+  const S = settings_();
+  const won = owned.filter(id => /^(hat|face|neck|wrist|feet)-/.test(id)).length;
+  return Math.max(0, Math.round(num_(S.clawCost) + won * num_(S.clawCostGrowth)));
+}
+
 function shopItems_() {
   return table_(TABS.shop).rows
     .filter(r => String(r.itemId).trim() && !(r.active === false || /^(false|no|n|0)$/i.test(String(r.active).trim())))
@@ -430,24 +451,28 @@ function shop_(req) {
   const c = mine.claw || {};
   const plays = c.day === today ? c.plays : 0;
   return {
-    items: shopItems_(), owned: mine.owned, equipped: mine.equipped, balance: num_(row.points),
-    claw: { cost: Math.round(S.clawCost), winRate: S.clawWinRate, pityAfter: S.clawPityAfter, misses: c.misses || 0,
-            playsLeft: S.clawDailyLimit > 0 ? Math.max(0, S.clawDailyLimit - plays) : null },
+    items: pricedFor_(shopItems_(), mine.owned), owned: mine.owned, equipped: mine.equipped, balance: num_(row.points),
+    priceGrowth: num_(S.priceGrowth),
+    claw: { cost: clawCostFor_(mine.owned), winRate: S.clawWinRate, pityAfter: S.clawPityAfter, misses: c.misses || 0,
+            playsLeft: S.clawDailyLimit > 0 ? Math.max(0, S.clawDailyLimit - plays) : null,
+            growth: num_(S.clawCostGrowth) },
   };
 }
 
 function buy_(req) {
   const who = auth_(req);
   const itemId = idSafe_(req.itemId, 40);
-  const item = shopItems_().find(i => i.itemId === itemId);
-  if (!item) throw new AppError('unknown_item');
-  if (item.kind === 'accessory') throw new AppError('claw_only');
-  if (item.price <= 0) throw new AppError('already_owned');
+  const base = shopItems_().find(i => i.itemId === itemId);
+  if (!base) throw new AppError('unknown_item');
+  if (base.kind === 'accessory') throw new AppError('claw_only');
+  if (base.price <= 0) throw new AppError('already_owned');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new AppError('busy');
   try {
     const mine = readShopSave_(who.studentId);
     if (mine.owned.indexOf(itemId) >= 0) throw new AppError('already_owned');
+    // price it against what they own right now, inside the lock
+    const item = pricedFor_(shopItems_(), mine.owned).find(i => i.itemId === itemId);
     const rt = table_(TABS.roster);
     const ri = rosterIndex_(rt, who);
     const balance = num_(rt.rows[ri].points);
@@ -457,7 +482,8 @@ function buy_(req) {
     appendRows_(TABS.points, [{ timestamp: now, studentId: who.studentId, delta: -item.price, reason: 'Shop: ' + item.name }]);
     mine.owned.push(itemId);
     writeShopSave_(who.studentId, mine);
-    return { balance: balance - item.price, owned: mine.owned, equipped: mine.equipped, item: item };
+    return { balance: balance - item.price, owned: mine.owned, equipped: mine.equipped, item: item,
+             items: pricedFor_(shopItems_(), mine.owned) };
   } finally {
     lock.releaseLock();
   }
@@ -500,11 +526,11 @@ function equip_(req) {
 function claw_(req) {
   const who = auth_(req);
   const S = settings_();
-  const cost = Math.max(0, Math.round(S.clawCost));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new AppError('busy');
   try {
     const mine = readShopSave_(who.studentId);
+    const cost = clawCostFor_(mine.owned);
     const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
     const c = mine.claw && mine.claw.day === today ? mine.claw : { day: today, plays: 0, misses: (mine.claw && mine.claw.misses) || 0 };
     if (S.clawDailyLimit > 0 && c.plays >= S.clawDailyLimit) throw new AppError('claw_limit');
@@ -530,7 +556,7 @@ function claw_(req) {
     writeShopSave_(who.studentId, mine);
     return {
       win: win, item: win ? target : null, balance: balance - cost, owned: mine.owned, equipped: mine.equipped,
-      cost: cost, playsLeft: S.clawDailyLimit > 0 ? S.clawDailyLimit - c.plays : null,
+      cost: cost, nextCost: clawCostFor_(mine.owned), playsLeft: S.clawDailyLimit > 0 ? S.clawDailyLimit - c.plays : null,
       misses: c.misses, pityAfter: S.clawPityAfter, prizesLeft: prizes.length - (win ? 1 : 0),
     };
   } finally {
@@ -776,6 +802,7 @@ function onOpen() {
     .addItem('Set up tabs', 'setupSheets')
     .addItem('Fill in missing PINs', 'generatePins')
     .addItem('Apply Settings and Skills changes now', 'reloadConfig')
+    .addItem('Reset shop prices to the built-in ones', 'resetShopPrices')
     .addToUi();
 }
 
@@ -827,6 +854,26 @@ function generatePins() {
     }
   });
   SpreadsheetApp.getActive().toast(filled + (filled === 1 ? ' PIN' : ' PINs') + ' added.', 'Math Realm', 5);
+}
+
+// Set up tabs never changes prices you edited. Run this when a new version ships new
+// prices and you want them, or to undo your own price edits.
+function resetShopPrices() {
+  const ui = SpreadsheetApp.getUi();
+  const answer = ui.alert('Reset shop prices?',
+    'This sets every item on the Shop tab back to its built-in price. Items you added yourself are left alone.',
+    ui.ButtonSet.OK_CANCEL);
+  if (answer !== ui.Button.OK) return;
+  const t = table_(TABS.shop);
+  const want = {};
+  DEFAULT_SHOP.forEach(r => { want[r[0]] = r[3]; });
+  let changed = 0;
+  t.rows.forEach((r, i) => {
+    const id = String(r.itemId).trim();
+    if (id in want && num_(r.price) !== want[id]) { t.update(i, { price: want[id] }); changed++; }
+  });
+  CacheService.getScriptCache().removeAll(['cfg_settings', 'cfg_skills']);
+  SpreadsheetApp.getActive().toast(changed + (changed === 1 ? ' price' : ' prices') + ' updated.', 'Math Realm', 5);
 }
 
 function reloadConfig() {
