@@ -92,7 +92,34 @@
 
   /* ── Problems and drawing live in area-core.js (shared with the demo) ── */
 
-  const makeProblem = () => AreaCore.make(kind);
+  /* ── Carrying: gradual release ──
+   * guided  type each column's total; the game regroups and explains it
+   * carry   write the answer digits and your own carries
+   * whole   type the whole sum at once
+   * A student moves on after enough correct regroupings, or after earning stars here.
+   */
+  const GUIDED_TO_CARRY = 5;   // correct regroupings in guided mode
+  const CARRY_TO_WHOLE = 8;    // correct carries written by the student
+  let memory = { v: 1, carry: {} }, memoryLoaded = false;
+  let stage = 'guided';
+  function carryStage() {
+    if (kind === 'tens') return 'whole';
+    const m = MathRealm.session.mastery[skillId] || {};
+    const c = memory.carry[skillId] || { guided: 0, self: 0 };
+    if (m.status === 'mastered' || (m.days || 0) >= 2 || c.self >= CARRY_TO_WHOLE) return 'whole';
+    if ((m.days || 0) >= 1 || c.guided >= GUIDED_TO_CARRY) return 'carry';
+    return 'guided';
+  }
+  function countRegroup(which) {
+    const c = memory.carry[skillId] || (memory.carry[skillId] = { guided: 0, self: 0 });
+    c[which] = (c[which] || 0) + 1;
+  }
+  const STAGE_NOTE = {
+    guided: 'When you add the partial products, you add one column at a time. Type the column\'s total, and the game shows you how to regroup and carry.',
+    carry: 'When you add the partial products, you write each digit of the answer and your own carries, one column at a time.',
+    whole: 'When you add the partial products, type the whole sum, starting with the ones digit.',
+  };
+  const makeProblem = () => AreaCore.make(kind, null, { totalMode: stage });
   const hostOf = AreaCore.host;
   const markBox = AreaCore.mark;
   const fillBox = AreaCore.fill;
@@ -110,7 +137,15 @@
     ? 'You already mastered this one! Playing keeps it sharp.'
     : "To earn today's star: solve " + NEED_RIGHT + ' of ' + ROUND_SIZE + ' problems without help.';
   show('#intro');
-  $('#startBtn').focus();
+  $('#startBtn').disabled = true;
+  MathRealm.loadState(GAME_ID).then(d => {
+    if (d.ok) { memoryLoaded = true; if (d.state && d.state.carry) memory = d.state; }
+    stage = carryStage();
+    if (kind !== 'tens') $('#ruleAdd').textContent = STAGE_NOTE[stage];
+    $('#ruleAdd').hidden = kind === 'tens';
+    $('#startBtn').disabled = false;
+    $('#startBtn').focus();
+  });
   $('#startBtn').addEventListener('click', startRound);
   $('#demoLink').href = 'how-it-works.html?show=' + kind + '&back=' + encodeURIComponent('area-model.html?skill=' + skillId);
   $('#againBtn').addEventListener('click', startRound);
@@ -118,6 +153,7 @@
   /* ── Playing ── */
 
   function startRound() {
+    stage = carryStage();
     round = MathRealm.startRound(GAME_ID, skillId);
     results = [];
     count = 0;
@@ -181,8 +217,10 @@
     if (mode !== 'solving') return;
     const b = problem.boxes[boxIdx];
     const typed = b.input.value.replace(/[^0-9]/g, '');
-    if (!typed) return;
-    if (Number(typed) === b.answer) {
+    if (!typed && !b.allowEmpty) return;   // a carry box left empty means "nothing carries"
+    if (Number(typed || 0) === b.answer) {
+      if (tries === 0 && b.type === 'colsum' && b.carryOut) countRegroup('guided');
+      if (tries === 0 && b.type === 'carry' && b.answer > 0) countRegroup('self');
       fillBox(b, b.answer);
       markBox(b, 'ok');
       b.input.disabled = true;
@@ -195,7 +233,7 @@
     markBox(b, 'bad');
     RealmFX.wrong();
     if (tries < 2) {
-      showHelp(['Not quite. Try that box again.'], true);
+      showHelp([b.retry || 'Not quite. Try that box again.'], true);
       b.input.select();
     } else {
       revealed = true;
@@ -263,7 +301,7 @@
     $('#resTicket').hidden = true;
     $('#againBtn').disabled = true;
     show('#results');
-    const res = await round.finish();
+    const [res] = await Promise.all([round.finish(), memoryLoaded ? MathRealm.saveState(GAME_ID, memory) : null]);
     showResult(res, right);
     $('#againBtn').disabled = false;
     $('#againBtn').focus();
