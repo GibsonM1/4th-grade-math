@@ -32,9 +32,27 @@
 
   /* The race card */
   .board { padding: 18px 22px 22px; }
-  .caption { min-height: 2.8em; margin: 0 0 10px; padding: 12px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-size: 1.15rem; line-height: 1.45; max-width: none; }
+  .caption { min-height: 4.4em; margin: 0 0 12px; padding: 12px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-size: 1.15rem; line-height: 1.45; max-width: none; }
   .caption.cpu { background: #E5F2FF; }
   .caption.bad { background: #FFE9F2; }
+  /* The math column: decimals stacked with the points lined up, fractions in a row */
+  .stage { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+  .mathcol { padding: 10px 12px; border-radius: var(--radius-md); background: #F8F5FF; }
+  .vsum { --cell: .85em; display: grid; justify-content: center; align-content: start; align-items: center; row-gap: 4px; font: 800 2.1rem/1.15 var(--display); color: var(--ink); height: 5.4em; }
+  .vsum .head { font: 600 .8rem/1 var(--body); color: var(--violet); text-align: center; }
+  .vsum .c { text-align: center; }
+  .vsum .pt { text-align: center; }
+  .vsum .ghost { color: #CDBFEA; }
+  .vsum .q { color: #CFC3EA; }
+  .vsum .rule { border-top: 4px solid var(--ink); margin: 2px 0; }
+  .vsum .claim { color: var(--sky-deep); }
+  .vsum .spinrow { color: #A06A00; }
+  .vsum.rolling .spinrow { animation: wobble .12s linear infinite; }
+  .vsum .spinrow.ghost, .vsum .ghost { color: #CDBFEA; }   /* the faint 0 in 0.40 */
+  .mathcol .key { width: 12.5rem; justify-self: center; margin: 6px 0 0; font-size: .75rem; line-height: 1.25; height: 2.5em; white-space: pre-line; color: var(--ink-soft); text-align: center; max-width: none; }
+  .fr { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; height: 4.6rem; font: 800 1.2rem/1 var(--display); color: var(--ink-soft); }
+  .fr .word { flex-basis: 100%; text-align: center; font: 600 .85rem/1 var(--body); }
   .eq { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 28px; min-height: 3.4em; margin: 4px 0 6px; color: var(--ink); }
   .eq .dec { font: 800 2.2rem/1.1 var(--display); }
   .eq .fr { display: flex; align-items: center; gap: 8px; font: 800 1.35rem/1 var(--display); color: var(--ink-soft); }
@@ -52,6 +70,8 @@
   #trackSvg.marking { cursor: crosshair; }
   #trackSvg:focus { outline: none; }
   #trackSvg:focus-visible { outline: 4px solid var(--lemon); outline-offset: 2px; border-radius: 12px; }
+  .zoom.unused { visibility: hidden; }   /* keeps its space so the card doesn't jump */
+  .zoom.none { display: none; }
   .zoom { margin-top: 2px; padding: 8px 10px 4px; border-radius: var(--radius-md); background: #F1F7FF; }
   .zoom p { margin: 0 0 2px; text-align: center; font-weight: 600; color: var(--sky-deep); max-width: none; }
   #zoomSvg { display: block; width: 100%; height: auto; cursor: crosshair; }
@@ -65,9 +85,9 @@
   @keyframes kick { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
   @keyframes stumble { 25% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } }
 
-  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; min-height: 52px; }
   .controls .btn { min-width: 9em; }
-  .tip { margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--ink-soft); max-width: none; }
+  .tip { min-height: 1.4em; margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--ink-soft); max-width: none; }
 
   /* Results */
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 6px 0 18px; }
@@ -120,13 +140,20 @@
     <div class="minimap" id="minimap" aria-hidden="true"></div>
     <section class="board card" aria-label="Race">
       <p class="caption" id="caption" aria-live="polite"></p>
-      <div class="eq" id="eq"></div>
-      <div class="track-wrap">
-        <svg id="trackSvg" viewBox="0 0 1000 290" role="application" aria-label="Number line" tabindex="0"></svg>
-      </div>
-      <div class="zoom" id="zoom" hidden>
-        <p id="zoomLabel"></p>
-        <svg id="zoomSvg" viewBox="0 0 1000 110" aria-hidden="true"></svg>
+      <div class="stage">
+        <aside class="mathcol" aria-label="The math for this turn">
+          <div class="vsum" id="vsum"></div>
+          <div class="fr" id="fr"></div>
+        </aside>
+        <div class="racecol">
+          <div class="track-wrap">
+            <svg id="trackSvg" viewBox="0 0 1000 282" role="application" aria-label="Number line" tabindex="0"></svg>
+          </div>
+          <div class="zoom" id="zoom">
+            <p id="zoomLabel">&nbsp;</p>
+            <svg id="zoomSvg" viewBox="0 0 1000 96" aria-hidden="true"></svg>
+          </div>
+        </div>
       </div>
       <div class="controls" id="controls"></div>
       <p class="tip" id="tip"></p>
