@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rectangle Kingdom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  .game { max-width: 1000px; margin: 0 auto; padding: 18px 18px 48px; }
+
+  /* Intro, results, missing */
+  .screen-card { max-width: 660px; margin: 18px auto 0; padding: 28px 30px; }
+  .screen-card h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); color: var(--violet); margin: 2px 0 12px; }
+  .zone-name { margin: 0; font-weight: 600; color: var(--berry); }
+  .rules { margin: 18px 0 24px; padding: 16px 18px; border-radius: var(--radius-md); background: #F6F1FF; }
+  .rules p { margin: 0 0 8px; color: var(--ink); }
+  .rules p:last-child { margin-bottom: 0; }
+  .screen-card .stars .star { width: 34px; height: 34px; }
+
+  /* Progress */
+  .progress { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .bar { flex: 1; height: 14px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, .16); }
+  .bar span { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--bubblegum), var(--lemon)); transition: width .3s ease; }
+  .count { font-weight: 600; white-space: nowrap; }
+
+  /* The problem card */
+  .board { padding: 22px 24px 22px; }
+  .board[data-state="done"] { box-shadow: 0 8px 0 rgba(16, 8, 46, .35), 0 0 0 5px var(--mint); }
+  .title { margin: 0 0 4px; text-align: center; font: 800 clamp(2.4rem, 7vw, 3.6rem)/1.1 var(--display); color: var(--ink); }
+  .step { min-height: 1.6em; margin: 0 auto 16px; max-width: none; text-align: center; font-weight: 600; color: var(--ink-soft); }
+
+  /* Number boxes */
+  .num {
+    width: 5.4em; padding: 6px 4px; text-align: center;
+    font: 800 1.45rem/1.2 var(--display); color: var(--ink);
+    background: #fff; border: 3px solid var(--card-edge); border-radius: 12px;
+  }
+  .num:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 4px var(--lemon); }
+  .num:disabled { background: rgba(255, 255, 255, .55); border-style: dashed; color: transparent; }
+  .num.ok { color: var(--mint-deep); background: #E7FAF3; border: 3px solid var(--mint); }
+  .num.bad { border-color: var(--bubblegum); background: #FFF0F6; animation: shake .35s; }
+  .num.shown { color: var(--berry); background: #FFF0F6; border: 3px solid var(--bubblegum); }
+  .num.ok:disabled, .num.shown:disabled { border-style: solid; }
+  .num.ok:disabled { color: var(--mint-deep); }
+  .num.shown:disabled { color: var(--berry); }
+  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+
+  /* Area diagram */
+  .area-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .area { display: grid; gap: 0; width: max-content; min-width: min(100%, 520px); margin: 0 auto; }
+  .edge { display: flex; align-items: center; justify-content: center; padding: 6px; }
+  .edge.left { padding-right: 12px; }
+  .edge .given { font: 800 1.6rem/1 var(--display); color: var(--ink); }
+  .region { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border: 3px solid #fff; }
+  .region .expr { font-weight: 600; font-size: .95rem; color: var(--ink-soft); }
+  .region .expr:empty { display: none; }
+  .area .num { width: 100%; max-width: 4.8em; font-size: 1.3rem; }
+  .edge.top { padding: 4px 6px 10px; }
+  .edge.left .num { width: 3.6em; }
+  @media (max-width: 640px) { .area .num { font-size: 1.1rem; } .edge.left .num { width: 3em; } .region { padding: 6px 4px; } }
+  .r0 { background: #E9DDFF; } .r1 { background: #D9F5EB; } .r2 { background: #FFE3EF; } .r3 { background: #FFF2C7; }
+
+  /* Stacked partial products */
+  .stack { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; gap: 8px 16px; font: 800 1.6rem/1.2 var(--display); color: var(--ink); }
+  .stack .n { text-align: right; padding-right: 6px; }
+  .stack .rule { grid-column: 1 / 2; border-top: 4px solid var(--ink); margin: 2px 0; }
+  .stack .note { font: 600 1rem/1.2 var(--body); color: var(--ink-soft); }
+  .stack .num { text-align: right; padding-right: 12px; }
+
+  /* Single answer (tens skill) */
+  .single { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em; font: 800 clamp(2.4rem, 7vw, 3.6rem)/1.1 var(--display); color: var(--ink); }
+  .single .num { font-size: clamp(2rem, 6vw, 3rem); width: 4.2em; }
+
+  /* Adding the parts */
+  .sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; margin-top: 18px; font: 800 1.4rem/1.2 var(--display); color: var(--ink); }
+  .sum .part { min-width: 2ch; text-align: center; }
+  .sum .part.wait { color: #CFC3EA; }
+
+  .help { margin: 18px 0 0; padding: 14px 16px; border-radius: var(--radius-md); background: #F7F3FF; color: var(--ink); }
+  .help p { margin: 0 auto; max-width: 60ch; text-align: center; }
+  .help p + p { margin-top: 6px; }
+  .help strong { color: var(--violet); }
+  .help svg { display: block; margin: 12px auto 0; max-width: 100%; height: auto; }
+  .help.warn { background: #FFF0F6; }
+  .actions-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 18px; }
+
+  /* Results */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 6px 0 18px; }
+  .stat { padding: 14px 16px; border-radius: var(--radius-md); background: #F6F1FF; }
+  .stat strong { display: block; font: 800 2rem/1.1 var(--display); color: var(--ink); }
+  .stat span { color: var(--ink-soft); font-size: .95rem; }
+  .star-msg { margin: 14px 0 0; padding: 14px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-weight: 600; }
+  .star-msg p { margin: 0; color: var(--ink); }
+  .star-msg p + p { margin-top: 6px; }
+  .ticket-wrap { margin: 18px 0 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  .ticket-wrap .ticket::before, .ticket-wrap .ticket::after { background: var(--card); }
+  .ticket-wrap p { margin: 0; color: var(--ink); font-weight: 600; max-width: 30ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="page game">
+
+  <header class="topbar">
+    <a class="pill" href="index.html">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back to the map
+    </a>
+    <div class="top-tools">
+      <button class="pill" type="button" id="musicBtn" aria-pressed="true">Music: on</button>
+      <button class="pill" type="button" id="soundBtn" aria-pressed="false">Sounds: off</button>
+      <div class="gems">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+        <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+      </div>
+    </div>
+  </header>
+
+  <main id="intro" hidden>
+    <section class="screen-card card">
+      <p class="zone-name" id="zoneName">Rectangle Kingdom</p>
+      <h1 id="skillTitle">Rectangles</h1>
+      <div id="introStars"></div>
+      <div class="rules">
+        <p id="ruleHow"></p>
+        <p>Type in the box, then press Enter. If it's not right, you get another try. Tap <strong>Show me how</strong> if you're stuck. Problems where you use it still earn gems, but don't count toward today's star.</p>
+        <p id="ruleStar"></p>
+      </div>
+      <button class="btn btn-big" type="button" id="startBtn">Start</button>
+    </section>
+  </main>
+
+  <main id="play" hidden>
+    <div class="progress">
+      <div class="bar" aria-hidden="true"><span id="bar"></span></div>
+      <span class="count" id="count" aria-live="polite"></span>
+    </div>
+    <section class="board card" id="board">
+      <h2 class="title" id="title"></h2>
+      <p class="step" id="step" aria-live="polite"></p>
+      <div id="work"></div>
+      <div class="help" id="help" hidden></div>
+      <div class="actions-row">
+        <button class="btn btn-soft" type="button" id="hintBtn">Show me how</button>
+        <button class="btn" type="button" id="nextBtn" hidden>Next problem</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="results" hidden>
+    <section class="screen-card card">
+      <h1 id="resTitle">Round complete!</h1>
+      <div class="stats">
+        <div class="stat"><strong id="resRight">0</strong><span>solved without help</span></div>
+        <div class="stat"><strong id="resTime">0</strong><span>typical time per problem</span></div>
+        <div class="stat"><strong id="resGems">…</strong><span id="resGemsLabel">saving your round</span></div>
+      </div>
+      <div id="resStars"></div>
+      <div class="star-msg" id="resMsg" hidden></div>
+      <div class="ticket-wrap" id="resTicket" hidden></div>
+      <div class="actions">
+        <button class="btn" type="button" id="againBtn" disabled>Play again</button>
+        <a class="btn btn-soft" href="index.html">Back to the map</a>
+      </div>
+    </section>
+  </main>
+
+  <main id="missing" hidden>
+    <section class="screen-card card">
+      <h1>That game isn't here</h1>
+      <p>This link doesn't match a Rectangle Kingdom skill. Head back to the map and pick one there.</p>
+      <div class="actions"><a class="btn" href="index.html">Back to the map</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/area-model.js"></script>
+</body>
+</html>
