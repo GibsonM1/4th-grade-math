@@ -109,6 +109,7 @@
   });
 
   if (!skill || !L) { show('#missing'); return; }
+  RealmMusic.setTheme('race');
 
   /* ── Unicorns (original drawing) ── */
 
@@ -128,10 +129,12 @@
     bob.append(S('circle', { cx: 42, cy: -66, r: 2.4, fill: INK }));
     bob.append(S('ellipse', { cx: 47, cy: -60, rx: 3.2, ry: 2, fill: '#FF9CC8', opacity: 0.85 }));
     g.append(bob);
-    if (name) {
-      const tag = S('text', { x: 0, y: -108, 'text-anchor': 'middle', 'font-size': 20, 'font-weight': 700, fill: INK, 'font-family': 'Lexend, sans-serif' });
+    if (name) {   // a racing bib on the saddle
+      const w = name.length * 11 + 14;
+      bob.append(S('rect', { x: -w / 2 - 2, y: -49, width: w, height: 23, rx: 7, fill: '#fff', stroke: INK, 'stroke-width': 1.8 }));
+      const tag = S('text', { x: -2, y: -32, 'text-anchor': 'middle', 'font-size': 17, 'font-weight': 700, fill: INK, 'font-family': 'Lexend, sans-serif' });
       tag.textContent = name;
-      g.append(tag);
+      bob.append(tag);
     }
     return g;
   }
@@ -172,7 +175,7 @@
 
   /* ── Race state ── */
 
-  let me = 0, cpu = 0, phase = 'idle', viewFor = 'me';
+  let me = 0, cpu = 0, phase = 'idle';
   let base = 0, spin = null, marker = null, tries = 0, markFor = 'me', zoomStart = null;
   let claim = null, claimWhy = '', arcs = [], round = null, results = [], caught = 0, cpuMistakes = 0;
 
@@ -186,10 +189,30 @@
 
   /* ── Drawing the number line ── */
 
-  const X0 = 50, X1 = 950, W = X1 - X0, CPU_Y = 112, ME_Y = 198, LINE_Y = 236, H = 290, SCALE = 0.85;
-  function viewStart() {
-    const pos = viewFor === 'me' ? me : cpu;
+  const X0 = 50, X1 = 950, W = X1 - X0, CPU_Y = 106, ME_Y = 204, LINE_Y = 238, H = 282, SCALE = 0.98;
+  // The camera: which stretch of the number line is showing. It glides between racers.
+  let cam = 0;
+  function camFor(who) {
+    const pos = who === 'me' ? me : cpu;
     return L.kind === 'tenths' ? Math.floor(pos / 100) * 100 : Math.floor(pos / 10) * 10;
+  }
+  function viewStart() { return cam; }
+  function panTo(who) {
+    const from = cam, to = camFor(who);
+    if (from === to) { draw(); return Promise.resolve(); }
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const dur = still ? 0 : Math.min(1100, 400 + Math.abs(to - from) / L.view * 260);
+    const t0 = performance.now();
+    return new Promise(done => {
+      const frame = now => {
+        const k = dur ? Math.min(1, (now - t0) / dur) : 1;
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   // ease in and out
+        cam = from + (to - from) * e;
+        draw();
+        if (k < 1) requestAnimationFrame(frame); else { cam = to; draw(); done(); }
+      };
+      requestAnimationFrame(frame);
+    });
   }
   const px = h => X0 + (h - viewStart()) / L.view * W;
 
@@ -226,7 +249,7 @@
 
     // the number line
     svg.append(S('line', { x1: X0 - 20, x2: X1 + 20, y1: LINE_Y, y2: LINE_Y, stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round' }));
-    for (let h = vs; h <= ve; h += L.step) {
+    for (let h = Math.ceil(vs / L.step - 1e-9) * L.step; h <= ve + 1e-9; h += L.step) {
       const whole = h % 100 === 0, tenth = h % 10 === 0;
       const len = whole ? 26 : tenth ? 16 : 7;
       svg.append(S('line', { x1: px(h), x2: px(h), y1: LINE_Y - len / 2, y2: LINE_Y + len / 2, stroke: INK, 'stroke-width': whole ? 3 : tenth ? 2 : 1.2 }));
@@ -301,17 +324,18 @@
   // The magnified tenth: 10 hundredths, each one clickable.
   function drawZoom() {
     const box = $('#zoom');
-    if (zoomStart === null || !(phase === 'mark' || phase === 'challenge')) { box.hidden = true; return; }
-    box.hidden = false;
+    const using = zoomStart !== null && (phase === 'mark' || phase === 'challenge');
+    box.classList.toggle('unused', !using);   // the space stays, so nothing jumps
+    if (!using) return;
     $('#zoomLabel').textContent = 'Zoomed in: from ' + fmtT(zoomStart) + ' to ' + fmtT(zoomStart + 10) + ', split into 10 hundredths';
     const z = $('#zoomSvg');
     z.replaceChildren();
-    const zx = i => X0 + i / 10 * W, y = 46;
+    const zx = i => X0 + i / 10 * W, y = 38;
     z.append(S('line', { x1: X0 - 14, x2: X1 + 14, y1: y, y2: y, stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round' }));
     for (let i = 0; i <= 10; i++) {
       const h = zoomStart + i, end = i === 0 || i === 10;
       z.append(S('line', { x1: zx(i), x2: zx(i), y1: y - (end ? 14 : 9), y2: y + (end ? 14 : 9), stroke: INK, 'stroke-width': end ? 3 : 2 }));
-      const t = S('text', { x: zx(i), y: y + 38, 'text-anchor': 'middle', 'font-size': end ? 20 : 17, 'font-weight': end ? 800 : 600, fill: INK, 'font-family': 'Lexend, sans-serif' });
+      const t = S('text', { x: zx(i), y: y + 36, 'text-anchor': 'middle', 'font-size': end ? 20 : 17, 'font-weight': end ? 800 : 600, fill: INK, 'font-family': 'Lexend, sans-serif' });
       t.textContent = fmtH(h);
       z.append(t);
       if (h === base) z.append(S('circle', { cx: zx(i), cy: y, r: 7, fill: markFor === 'me' ? '#FF7EB6' : '#7CC8FF', stroke: INK, 'stroke-width': 2 }));
@@ -338,28 +362,58 @@
 
   /* ── The equation shown above the line ── */
 
-  function equation(from, s, answer) {
-    const eq = $('#eq');
-    eq.replaceChildren();
+  // Decimals stacked with the decimal points lined up (ones . tenths hundredths).
+  // A hundredths column appears when it's needed: always on the hundredths levels, and on the
+  // tenths level only when Comet's answer has hundredths in it (0.7 + 0.6 = "0.13").
+  // A faint 0 shows that a tenth like 0.4 is the same as 0.40.
+  function equation(from, s, answer, isClaim) {
+    const box = $('#vsum'), frBox = $('#fr');
+    box.replaceChildren();
+    frBox.replaceChildren();
     if (!s) return;
-    const dec = el('div', 'dec');
-    const box = el('span', 'spinbox', s.text);
-    box.id = 'spinbox';
-    dec.append(document.createTextNode(fmt(from) + ' + '), box, document.createTextNode(' = ' + (answer === null ? '?' : fmt(answer))));
-    const fr = el('div', 'fr');
+    const values = [from, s.h].concat(answer === null ? [] : [answer]);
+    const hund = L.kind !== 'tenths' || values.some(v => v % 10 !== 0);
+    box.style.gridTemplateColumns = 'var(--cell) var(--cell) .35em var(--cell)' + (hund ? ' var(--cell)' : '');
+    const cell = (cls, text) => box.append(el('span', cls, text));
+    cell('', ''); cell('head', 'O'); cell('head', ''); cell('head', 't'); if (hund) cell('head', 'h');
+    const row = (op, v, opts) => {
+      const o = opts || {};
+      const extra = o.cls ? ' ' + o.cls : '';
+      cell('c' + extra, op);
+      if (v === null) {
+        cell('c q' + extra, '?'); cell('pt' + extra, '.'); cell('c q' + extra, '?'); if (hund) cell('c q' + extra, '?');
+        return;
+      }
+      cell('c' + extra, String(Math.floor(v / 100)));
+      cell('pt' + extra, '.');
+      cell('c' + extra, String(Math.floor(v / 10) % 10));
+      if (hund) {
+        const showGhost = o.tenthOnly;           // 0.4 written as 0.4 with a faint 0
+        const blank = L.kind === 'tenths' && v % 10 === 0;   // tenths level: leave the hundredths empty
+        cell('c' + extra + (showGhost ? ' ghost' : ''), blank ? '' : String(v % 10));
+      }
+    };
+    row('', from);
+    row('+', s.h, { cls: 'spinrow', tenthOnly: L.kind === 'mixed' && s.tenth });
+    const line = el('span', 'rule');
+    line.style.gridColumn = '1 / -1';
+    box.append(line);
+    row('', answer, isClaim ? { cls: 'claim' } : null);
+    const key = el('p', 'key', 'O = ones, t = tenths' + (hund ? '\nh = hundredths' : ''));
+    key.style.gridColumn = '1 / -1';
+    box.append(key);
+
     const d = L.kind === 'tenths' ? 10 : 100;
-    fr.append(el('span', 'word', 'as fractions:'), fracEl(from, d), document.createTextNode('+'), fracEl(s.h, d), document.createTextNode('='));
-    fr.append(answer === null ? document.createTextNode('?') : fracEl(answer, d));
-    eq.append(dec, fr);
+    frBox.append(el('span', 'word', 'As fractions:'), fracEl(from, d), document.createTextNode('+'), fracEl(s.h, d), document.createTextNode('='));
+    frBox.append(answer === null || isClaim ? document.createTextNode('?') : fracEl(answer, d));
   }
 
-  async function spinAnimation(s) {
-    const box = $('#spinbox');
-    if (!box) return;
+  async function spinAnimation(s, from) {
+    const box = $('#vsum');
     box.classList.add('rolling');
-    for (let i = 0; i < 8; i++) { box.textContent = makeSpin().text; await wait(70); }
+    for (let i = 0; i < 8; i++) { equation(from, makeSpin(), null); await wait(70); }
     box.classList.remove('rolling');
-    box.textContent = s.text;
+    equation(from, s, null);
     RealmFX.correct();
   }
 
@@ -395,6 +449,7 @@
       const ve = viewStart() + L.view;
       const target = Math.max(viewStart(), Math.min(to, ve));
       g.classList.add('running');
+      RealmFX.gallop(300 + Math.abs(to - from) / L.view * 1500);
       const anim = g.animate(
         [{ transform: 'translate(' + px(from) + 'px,' + y + 'px) scale(' + SCALE + ')' }, { transform: 'translate(' + px(target) + 'px,' + y + 'px) scale(' + SCALE + ')' }],
         { duration: 300 + Math.abs(to - from) / L.view * 1500, easing: 'ease-in-out', fill: 'forwards' }
@@ -514,18 +569,23 @@
     me = 0; cpu = 0; results = []; caught = 0; cpuMistakes = 0;
     arcs = []; marker = null; claim = null; zoomStart = null;
     round = MathRealm.startRound(GAME_ID, skillId);
+    cam = 0;
+    $('#zoom').classList.toggle('none', L.kind === 'tenths');   // tenths never zoom, so no space for it
+    $('#zoom').classList.add('unused');
     show('#race');
     minimap();
     myTurn();
   }
 
-  function myTurn() {
-    phase = 'spin';
-    viewFor = 'me';
+  async function myTurn() {
+    phase = 'panning';
     arcs = []; marker = null; claim = null; zoomStart = null; spin = null;
     caption('Your turn! Spin to see how far your unicorn can go.');
     tip('');
     equation(me, null, null);
+    controls([{ label: 'Spin!', id: 'spinBtn', disabled: true, on: mySpin }]);
+    await panTo('me');
+    phase = 'spin';
     draw();
     controls([{ label: 'Spin!', id: 'spinBtn', on: mySpin }]);
   }
@@ -535,7 +595,7 @@
     controls([]);
     spin = makeSpin();
     equation(me, spin, null);
-    await spinAnimation(spin);
+    await spinAnimation(spin, me);
     startMarking('me', me, spin);
   }
 
@@ -647,17 +707,17 @@
 
   async function cpuTurn() {
     phase = 'cpuSpin';
-    viewFor = 'cpu';
     arcs = []; marker = null; zoomStart = null; claim = null;
     const s = cpuSpin();
     spin = s;
     base = cpu;
     caption("Comet's turn. Comet is spinning…", 'cpu');
     tip('');
+    equation(cpu, null, null);
+    controls([{ label: 'Looks right', disabled: true, on: () => {} }, { label: 'Spot the mistake!', soft: true, disabled: true, on: () => {} }]);
+    await panTo('cpu');
     equation(cpu, s, null);
-    draw();
-    controls([]);
-    await spinAnimation(s);
+    await spinAnimation(s, cpu);
     await wait(500);
     const truth = cpu + s.h;
     const slip = Math.random() < mistakeRate() ? mistakeFor(cpu, s) : null;
@@ -665,8 +725,7 @@
     claimWhy = slip ? slip.why : '';
     phase = 'cpuShow';
     caption('Comet is at ' + fmt(cpu) + ' and spun ' + s.text + '. Comet says: ' + fmt(cpu) + ' + ' + s.text + ' = ' + fmtC(claim) + '. Is Comet right?', 'cpu');
-    equation(cpu, s, null);
-    $('#eq .dec').lastChild.textContent = ' = ' + fmtC(claim) + ' ?';
+    equation(cpu, s, claim, true);
     draw();
     controls([
       { label: 'Looks right', on: acceptClaim },
@@ -710,9 +769,7 @@
         caught++;
         RealmFX.fanfare();
         caption('You caught it! ' + claimWhy + ' Comet stays at ' + fmt(cpu) + ', and your unicorn gets a sparkle boost of ' + fmt(L.boost) + '!');
-        draw();
-        viewFor = 'me';
-        draw();
+        await panTo('me');
         await move('me', me + L.boost);
         if (me >= L.finish) { endRace(true); return; }
       } else {
