@@ -71,3 +71,28 @@
   .region { padding: 6px 3px; }
   .edge .place { font-size: .8rem; }
 }
+
+/* ── Adding with carries ── */
+.paper-wrap.with-carries { position: relative; }
+.col-ring { position: absolute; border: 3px solid var(--violet); border-radius: 22px; pointer-events: none; transition: left .3s ease, top .3s ease, height .3s ease; }
+.paper .carryrow { min-height: 1.2em; }
+.paper .carryrow .cell { display: flex; align-items: center; justify-content: center; font-size: .66em; color: var(--berry); box-shadow: none; }
+.paper .carryrow .cell .v { line-height: 1; }
+.paper .carryrow .cell.carried .v { padding: 0 4px; border-radius: 6px; background: #FFE3EF; }
+.paper .answerrow .cell { display: flex; align-items: center; justify-content: center; }
+.paper .answerrow .cell .v { display: inline-block; color: var(--mint-deep); }
+
+/* One-digit boxes for writing the answer and your own carries */
+.cellin { width: 100%; height: 100%; min-height: 1.15em; padding: 0; margin: 0; text-align: center; font: inherit; color: var(--ink); background: #fff; border: 2px dashed #DED4EF; border-radius: 8px; }
+.carryrow .cellin { width: 1.3em; height: 1.3em; min-height: 0; font-size: 1em; line-height: 1; border-radius: 7px; }
+.cellin:disabled { background: transparent; color: transparent; }
+.cellin:focus { outline: none; border: 3px solid var(--violet); box-shadow: 0 0 0 4px var(--lemon); }
+.cellin.ok, .cellin.ok:disabled { color: var(--mint-deep); background: #E7FAF3; border: 2px solid var(--mint); }
+.carryrow .cellin.ok, .carryrow .cellin.ok:disabled { color: var(--berry); background: #FFE3EF; border-color: #F7B6D2; }
+.cellin.shown, .cellin.shown:disabled { color: var(--berry); background: #FFF0F6; border: 2px solid var(--bubblegum); }
+.cellin.bad { border: 3px solid var(--bubblegum); background: #FFF0F6; animation: shake .35s; }
+.paper .carryrow .cellin.zero, .paper .carryrow .cellin.zero:disabled { background: transparent; border-color: transparent; }   /* "nothing carries" */
+
+/* Guided: type the circled column's total here */
+.colsum-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; font: 600 1.05rem/1.2 var(--body); color: var(--ink); }
+.colsum-row .num { width: 2.6em; font-size: 1.7rem; }
