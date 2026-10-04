@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unicorn Racetrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  .game { max-width: 1180px; margin: 0 auto; padding: 18px 18px 48px; }
+  .screen-card { max-width: 720px; margin: 18px auto 0; padding: 28px 30px; }
+  .screen-card h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); color: var(--violet); margin: 2px 0 12px; }
+  .zone-name { margin: 0; font-weight: 600; color: var(--sky-deep); }
+  .rules { margin: 18px 0 22px; padding: 16px 18px; border-radius: var(--radius-md); background: #F6F1FF; }
+  .rules p { margin: 0 0 9px; color: var(--ink); }
+  .rules p:last-child { margin-bottom: 0; }
+  .screen-card .stars .star { width: 34px; height: 34px; }
+  .racers { display: flex; flex-wrap: wrap; gap: 14px 30px; align-items: center; margin: 10px 0 4px; }
+  .racer { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); }
+  .racer svg { width: 74px; height: 62px; }
+
+  /* Mini map of the whole race */
+  .minimap { position: relative; height: 46px; margin: 4px 6px 16px; }
+  .minimap .track { position: absolute; left: 0; right: 0; top: 21px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .25); }
+  .minimap .dot { position: absolute; top: 12px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; border: 3px solid #fff; transition: left .8s ease; }
+  .minimap .dot.me { background: var(--bubblegum); }
+  .minimap .dot.cpu { background: var(--sky); top: 12px; }
+  .minimap .flag { position: absolute; right: -6px; top: 0; font-weight: 800; font-family: var(--display); }
+  .minimap .lbl { position: absolute; top: -2px; font-size: .8rem; font-weight: 600; transform: translateX(-50%); white-space: nowrap; color: var(--haze); }
+
+  /* The race card */
+  .board { padding: 18px 22px 22px; }
+  .caption { min-height: 2.8em; margin: 0 0 10px; padding: 12px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-size: 1.15rem; line-height: 1.45; max-width: none; }
+  .caption.cpu { background: #E5F2FF; }
+  .caption.bad { background: #FFE9F2; }
+  .eq { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 28px; min-height: 3.4em; margin: 4px 0 6px; color: var(--ink); }
+  .eq .dec { font: 800 2.2rem/1.1 var(--display); }
+  .eq .fr { display: flex; align-items: center; gap: 8px; font: 800 1.35rem/1 var(--display); color: var(--ink-soft); }
+  .eq .fr .word { font: 600 .95rem/1 var(--body); }
+  .sf { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.05; vertical-align: middle; }
+  .sf .t { padding: 0 3px 2px; border-bottom: 3px solid currentColor; }
+  .sf .b { padding-top: 2px; }
+  .mixed { display: inline-flex; align-items: center; gap: 3px; }
+  .spinbox { display: inline-flex; align-items: center; justify-content: center; min-width: 3.2em; padding: 2px 10px; border-radius: 14px; background: #FFF1B8; box-shadow: inset 0 -4px 0 var(--gold); }
+  .spinbox.rolling { animation: wobble .12s linear infinite; }
+  @keyframes wobble { 50% { transform: rotate(-4deg) scale(1.05); } }
+
+  .track-wrap { position: relative; }
+  #trackSvg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  #trackSvg.marking { cursor: crosshair; }
+  #trackSvg:focus { outline: none; }
+  #trackSvg:focus-visible { outline: 4px solid var(--lemon); outline-offset: 2px; border-radius: 12px; }
+  .zoom { margin-top: 2px; padding: 8px 10px 4px; border-radius: var(--radius-md); background: #F1F7FF; }
+  .zoom p { margin: 0 0 2px; text-align: center; font-weight: 600; color: var(--sky-deep); max-width: none; }
+  #zoomSvg { display: block; width: 100%; height: auto; cursor: crosshair; }
+
+  .uni .legs rect { transform-box: fill-box; transform-origin: 50% 0; }
+  .uni.running .bob { animation: bob .22s ease-in-out infinite alternate; }
+  .uni.running .legs rect:nth-child(odd) { animation: kick .22s ease-in-out infinite alternate; }
+  .uni.running .legs rect:nth-child(even) { animation: kick .22s ease-in-out infinite alternate-reverse; }
+  .uni.stumble { animation: stumble .5s ease; }
+  @keyframes bob { to { transform: translateY(-6px); } }
+  @keyframes kick { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
+  @keyframes stumble { 25% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; }
+  .controls .btn { min-width: 9em; }
+  .tip { margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--ink-soft); max-width: none; }
+
+  /* Results */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 6px 0 18px; }
+  .stat { padding: 14px 16px; border-radius: var(--radius-md); background: #F6F1FF; }
+  .stat strong { display: block; font: 800 2rem/1.1 var(--display); color: var(--ink); }
+  .stat span { color: var(--ink-soft); font-size: .95rem; }
+  .star-msg { margin: 14px 0 0; padding: 14px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-weight: 600; }
+  .star-msg p { margin: 0; color: var(--ink); }
+  .star-msg p + p { margin-top: 6px; }
+  .ticket-wrap { margin: 18px 0 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  .ticket-wrap .ticket::before, .ticket-wrap .ticket::after { background: var(--card); }
+  .ticket-wrap p { margin: 0; color: var(--ink); font-weight: 600; max-width: 30ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="page game">
+  <header class="topbar">
+    <a class="pill" href="index.html">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back to the map
+    </a>
+    <div class="top-tools">
+      <button class="pill" type="button" id="musicBtn" aria-pressed="true">Music: on</button>
+      <button class="pill" type="button" id="soundBtn" aria-pressed="false">Sounds: off</button>
+      <div class="gems">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+        <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+      </div>
+    </div>
+  </header>
+
+  <main id="intro" hidden>
+    <section class="screen-card card">
+      <p class="zone-name" id="zoneName">Unicorn Racetrack</p>
+      <h1 id="skillTitle">Unicorn race</h1>
+      <div class="racers" id="racers"></div>
+      <div id="introStars"></div>
+      <div class="rules">
+        <p><strong>Your turn:</strong> spin to get a number, then mark the spot on the number line where your unicorn will land and press <strong>Go!</strong> You can click the line or use the arrow keys.</p>
+        <p id="ruleZoom" hidden><strong>Hundredths:</strong> each tenth is split into 10 hundredths. Click near your spot, and that tenth opens up below so you can pick the exact hundredth.</p>
+        <p><strong>Comet's turn:</strong> Comet sometimes makes mistakes. If Comet's math looks wrong, press <strong>Spot the mistake!</strong> and show where Comet should land. Catch a real mistake and your unicorn gets a sparkle boost.</p>
+        <p id="ruleStar"></p>
+      </div>
+      <button class="btn btn-big" type="button" id="startBtn" disabled>Saddling up…</button>
+    </section>
+  </main>
+
+  <main id="race" hidden>
+    <div class="minimap" id="minimap" aria-hidden="true"></div>
+    <section class="board card" aria-label="Race">
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="eq" id="eq"></div>
+      <div class="track-wrap">
+        <svg id="trackSvg" viewBox="0 0 1000 290" role="application" aria-label="Number line" tabindex="0"></svg>
+      </div>
+      <div class="zoom" id="zoom" hidden>
+        <p id="zoomLabel"></p>
+        <svg id="zoomSvg" viewBox="0 0 1000 110" aria-hidden="true"></svg>
+      </div>
+      <div class="controls" id="controls"></div>
+      <p class="tip" id="tip"></p>
+    </section>
+  </main>
+
+  <main id="done" hidden>
+    <section class="screen-card card">
+      <h1 id="resTitle">Race over!</h1>
+      <div class="stats">
+        <div class="stat"><strong id="resRight">0</strong><span>landings right on the first try</span></div>
+        <div class="stat"><strong id="resCaught">0</strong><span>of Comet's mistakes caught</span></div>
+        <div class="stat"><strong id="resGems">…</strong><span id="resGemsLabel">saving your race</span></div>
+      </div>
+      <div id="resStars"></div>
+      <div class="star-msg" id="resMsg" hidden></div>
+      <div class="ticket-wrap" id="resTicket" hidden></div>
+      <div class="actions">
+        <button class="btn" type="button" id="againBtn" disabled>Race again</button>
+        <a class="btn btn-soft" href="index.html">Back to the map</a>
+      </div>
+    </section>
+  </main>
+
+  <main id="missing" hidden>
+    <section class="screen-card card">
+      <h1>That race isn't here</h1>
+      <p>This link doesn't match a Unicorn Racetrack skill. Head back to the map and pick one there.</p>
+      <div class="actions"><a class="btn" href="index.html">Back to the map</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/unicorn-race.js"></script>
+</body>
+</html>
