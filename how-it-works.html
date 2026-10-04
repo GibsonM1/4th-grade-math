@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>See how it works: multiplication in Rectangle Kingdom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<link rel="stylesheet" href="css/area.css">
+<style>
+  .game { max-width: 1180px; margin: 0 auto; padding: 18px 18px 48px; }
+  .intro { margin: 0 0 18px; }
+  .intro h1 { font-size: clamp(2rem, 5vw, 2.8rem); }
+  .intro p { margin: 6px 0 0; color: var(--haze); max-width: 70ch; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+  .tabs button { border: 2px solid rgba(255, 255, 255, .28); border-radius: 999px; padding: 9px 16px; background: rgba(255, 255, 255, .1); color: #fff; font: 600 1rem/1.2 var(--body); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: #fff; color: var(--violet); border-color: #fff; }
+  .board { padding: 22px 24px 24px; }
+  .caption { min-height: 4.6em; margin: 0 0 18px; padding: 14px 18px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-size: 1.15rem; line-height: 1.5; }
+  .caption { max-width: none; }
+  .caption.grown { background: #E9F4FF; }
+  .std { display: flex; flex-direction: column; align-items: center; }
+  .std-label { margin: 0 0 8px; font: 800 1.2rem/1.2 var(--display); color: #2D76B5; }
+  .caption strong { color: var(--violet); }
+  .extra { display: flex; justify-content: center; margin-top: 18px; }
+  .extra:empty { display: none; }
+  .extra svg { max-width: 100%; height: auto; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 12px; margin-top: 22px; }
+  .counter { font-weight: 600; color: var(--ink-soft); min-width: 7em; text-align: center; }
+  .grown-note { margin: 18px auto 0; max-width: 70ch; color: var(--haze); font-size: .95rem; }
+</style>
+</head>
+<body>
+<div class="page game">
+  <header class="topbar">
+    <a class="pill" href="index.html" id="backLink">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </a>
+  </header>
+
+  <section class="intro">
+    <h1>See how it works</h1>
+    <p>Step-by-step demos of the multiplication methods your student practices in Rectangle Kingdom. Press <strong>Play</strong> to watch, or step through with <strong>Next</strong>. Each demo ends with a note for grown-ups on how it connects to the standard method.</p>
+  </section>
+
+  <div class="tabs" role="tablist" aria-label="Method">
+    <button type="button" role="tab" data-kind="tens">Multiplying with tens</button>
+    <button type="button" role="tab" data-kind="area1">Area model: big number × 1 digit</button>
+    <button type="button" role="tab" data-kind="area2">Area model: 2 digits × 2 digits</button>
+    <button type="button" role="tab" data-kind="partial2">Partial products</button>
+  </div>
+
+  <main class="board card">
+    <h2 class="problem-title" id="title"></h2>
+    <p class="caption" id="caption" aria-live="polite"></p>
+    <div id="work"></div>
+    <div class="extra" id="extra"></div>
+    <div class="controls">
+      <button class="btn btn-soft btn-small" type="button" id="backBtn">Back</button>
+      <button class="btn" type="button" id="playBtn">Play</button>
+      <button class="btn btn-soft btn-small" type="button" id="nextBtn">Next</button>
+      <span class="counter" id="counter"></span>
+      <button class="btn btn-soft btn-small" type="button" id="restartBtn">Start over</button>
+      <button class="btn btn-soft btn-small" type="button" id="newBtn">Try other numbers</button>
+    </div>
+  </main>
+  <p class="grown-note">This page doesn't need a login, so it's fine to share the link with family.</p>
+</div>
+
+<script src="js/area-core.js"></script>
+<script src="js/how-it-works.js"></script>
+</body>
+</html>
