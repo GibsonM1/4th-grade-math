@@ -159,119 +159,14 @@
     speechSynthesis.speak(u);
   }
 
-  /* ── The pets (original drawings). Earned sprites can join this list later. ── */
+  /* ── The pets: drawings live in js/sprites.js (shared with the Sprite Shop).
+   *    Everyone has the five starters; critters adopted in the shop come to eat too. ── */
 
-  const PETS = [
-    { id: 'bunbun', name: 'Bun-bun', species: 'bunny',   plural: 'bunnies',  food: 'berries',        color: '#C2477F', dot: '#7E2A5A', draw: drawBunny },
-    { id: 'comet',  name: 'Comet',   species: 'unicorn', plural: 'unicorns', food: 'sparkle oats',   color: '#F2C94C', dot: '#FFFFFF', draw: drawUnicorn },
-    { id: 'pip',    name: 'Pip',     species: 'puppy',   plural: 'puppies',  food: 'kibble',         color: '#B07A45', dot: '#7A4E26', draw: drawPuppy },
-    { id: 'miso',   name: 'Miso',    species: 'kitten',  plural: 'kittens',  food: 'fish crunchies', color: '#F08A4B', dot: '#B85A22', draw: drawKitten },
-    { id: 'shelly', name: 'Shelly',  species: 'turtle',  plural: 'turtles',  food: 'lettuce',        color: '#79C25A', dot: '#3F8A2E', draw: drawTurtle },
-  ];
+  const PETS = RealmSprites.cafeCritters(MathRealm.session);
+  const petSvg = (pet, cls) => RealmSprites.critterSvg(pet, cls);
+  // outline style for the bowls, scoops and scale drawn below
   const line = { stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' };
   const fill = (f, extra) => Object.assign({ fill: f }, line, extra || {});
-  function eyes(g, y, dx) {
-    [-dx, dx].forEach(x => {
-      g.append(S('circle', { cx: x, cy: y, r: 3.4, fill: INK }));
-      g.append(S('circle', { cx: x + 1.1, cy: y - 1.2, r: 1.1, fill: '#fff' }));
-    });
-  }
-  function cheeks(g, y, dx) {
-    [-dx, dx].forEach(x => g.append(S('ellipse', { cx: x, cy: y, rx: 4.5, ry: 2.6, fill: '#FF9CC8', opacity: 0.75 })));
-  }
-  function smile(g, y) {
-    g.append(S('path', { d: 'M-5,' + y + ' Q-2.5,' + (y + 3) + ' 0,' + (y - 0.5) + ' Q2.5,' + (y + 3) + ' 5,' + y, fill: 'none', stroke: INK, 'stroke-width': 2, 'stroke-linecap': 'round' }));
-  }
-  function drawBunny(g) {
-    const body = '#EDE6FA';
-    [[-11, -10], [11, 10]].forEach(([x, r]) => {
-      g.append(S('ellipse', fill(body, { cx: x, cy: -104, rx: 8, ry: 24, transform: 'rotate(' + r + ' ' + x + ' -104)' })));
-      g.append(S('ellipse', { cx: x, cy: -102, rx: 3.6, ry: 16, fill: '#FFC2DD', transform: 'rotate(' + r + ' ' + x + ' -102)' }));
-    });
-    g.append(S('ellipse', fill(body, { cx: -14, cy: -5, rx: 12, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 14, cy: -5, rx: 12, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 0, cy: -32, rx: 28, ry: 28 })));
-    g.append(S('ellipse', { cx: 0, cy: -27, rx: 16, ry: 18, fill: '#FFFFFF' }));
-    g.append(S('ellipse', fill(body, { cx: -11, cy: -13, rx: 7, ry: 5 })));
-    g.append(S('ellipse', fill(body, { cx: 11, cy: -13, rx: 7, ry: 5 })));
-    g.append(S('circle', fill(body, { cx: 0, cy: -70, r: 24 })));
-    eyes(g, -73, 9);
-    cheeks(g, -63, 15);
-    g.append(S('ellipse', { cx: 0, cy: -65, rx: 3.6, ry: 2.6, fill: '#FF7EB6' }));
-    smile(g, -60);
-  }
-  function drawPuppy(g) {
-    const body = '#E8B877', light = '#FFF4E2', ear = '#9C6234';
-    g.append(S('ellipse', fill(body, { cx: -14, cy: -5, rx: 12, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 14, cy: -5, rx: 12, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 0, cy: -31, rx: 27, ry: 28 })));
-    g.append(S('ellipse', { cx: 0, cy: -27, rx: 14, ry: 16, fill: light }));
-    g.append(S('circle', fill(body, { cx: 0, cy: -70, r: 25 })));
-    g.append(S('path', fill(ear, { d: 'M-18,-88 C-36,-88 -42,-62 -33,-48 C-26,-50 -21,-62 -17,-74 Z' })));
-    g.append(S('path', fill(ear, { d: 'M18,-88 C36,-88 42,-62 33,-48 C26,-50 21,-62 17,-74 Z' })));
-    g.append(S('ellipse', { cx: 9, cy: -77, rx: 7.5, ry: 6.5, fill: '#C98F4E' }));
-    eyes(g, -76, 9);
-    g.append(S('ellipse', { cx: 0, cy: -62, rx: 11, ry: 8, fill: light }));
-    g.append(S('ellipse', { cx: 0, cy: -66, rx: 4.6, ry: 3.2, fill: INK }));
-    smile(g, -60);
-    g.append(S('rect', fill('#D2448A', { x: -16, y: -49, width: 32, height: 6, rx: 3 })));
-    g.append(S('circle', fill('#FFD84D', { cx: 0, cy: -40, r: 3.8, 'stroke-width': 1.5 })));
-  }
-  function drawKitten(g) {
-    const body = '#FFB067', light = '#FFF0DE';
-    g.append(S('path', { d: 'M20,-14 C44,-18 46,-48 32,-58', fill: 'none', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }));
-    g.append(S('path', { d: 'M20,-14 C44,-18 46,-48 32,-58', fill: 'none', stroke: body, 'stroke-width': 7, 'stroke-linecap': 'round' }));
-    g.append(S('ellipse', fill(body, { cx: -13, cy: -5, rx: 11, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 13, cy: -5, rx: 11, ry: 6 })));
-    g.append(S('ellipse', fill(body, { cx: 0, cy: -31, rx: 25, ry: 28 })));
-    g.append(S('ellipse', { cx: 0, cy: -27, rx: 13, ry: 16, fill: light }));
-    g.append(S('path', fill(body, { d: 'M-23,-78 L-19,-103 L-3,-91 Z' })));
-    g.append(S('path', fill(body, { d: 'M23,-78 L19,-103 L3,-91 Z' })));
-    g.append(S('path', { d: 'M-19,-83 L-17,-97 L-9,-90 Z', fill: '#FFC2DD' }));
-    g.append(S('path', { d: 'M19,-83 L17,-97 L9,-90 Z', fill: '#FFC2DD' }));
-    g.append(S('circle', fill(body, { cx: 0, cy: -70, r: 24 })));
-    g.append(S('path', { d: 'M-6,-93 L-4,-85 M0,-94 L0,-86 M6,-93 L4,-85', stroke: '#D9792E', 'stroke-width': 3, 'stroke-linecap': 'round' }));
-    eyes(g, -72, 9);
-    cheeks(g, -62, 15);
-    g.append(S('path', { d: 'M-3.5,-66 L3.5,-66 L0,-62.5 Z', fill: '#FF7EB6' }));
-    smile(g, -60);
-    g.append(S('path', { d: 'M-9,-63 L-27,-67 M-9,-60 L-27,-58 M9,-63 L27,-67 M9,-60 L27,-58', stroke: INK, 'stroke-width': 1.4, 'stroke-linecap': 'round' }));
-  }
-  function drawTurtle(g) {
-    const skin = '#A9DC8E';
-    g.append(S('ellipse', fill(skin, { cx: -28, cy: -8, rx: 11, ry: 7 })));
-    g.append(S('ellipse', fill(skin, { cx: 28, cy: -8, rx: 11, ry: 7 })));
-    g.append(S('path', fill('#4FB07A', { d: 'M-44,-16 C-44,-70 44,-70 44,-16 Z' })));
-    g.append(S('path', { d: 'M-12,-40 L0,-48 L12,-40 L12,-27 L0,-21 L-12,-27 Z M-36,-24 L-22,-28 L-18,-40 L-28,-50 M36,-24 L22,-28 L18,-40 L28,-50', fill: '#7BCB98', stroke: '#2F7A50', 'stroke-width': 1.6, 'stroke-linejoin': 'round' }));
-    g.append(S('rect', fill('#3E8F62', { x: -48, y: -20, width: 96, height: 10, rx: 5 })));
-    g.append(S('circle', fill(skin, { cx: 0, cy: -70, r: 20 })));
-    eyes(g, -72, 7);
-    cheeks(g, -64, 12);
-    smile(g, -63);
-  }
-  // Comet, the same unicorn as on the Unicorn Racetrack
-  function drawUnicorn(g) {
-    const pal = { body: '#EAF4FF', mane: '#4FD1AB', mane2: '#7CC8FF' };
-    const u = S('g', { transform: 'translate(-2,0) scale(1.05)' });
-    [-24, -12, 12, 24].forEach(x => u.append(S('rect', { x: x - 3.5, y: -24, width: 7, height: 24, rx: 3.5, fill: pal.body, stroke: INK, 'stroke-width': 2 })));
-    u.append(S('path', fill(pal.mane, { d: 'M-26,-38 C-46,-42 -52,-22 -42,-10 C-40,-24 -34,-28 -24,-30 Z' })));
-    u.append(S('ellipse', fill(pal.body, { cx: 0, cy: -36, rx: 30, ry: 16 })));
-    u.append(S('path', fill(pal.body, { d: 'M14,-44 C18,-58 22,-64 28,-68 L40,-60 C33,-54 29,-46 27,-34 Z' })));
-    u.append(S('path', fill(pal.body, { d: 'M25,-72 C33,-80 49,-76 54,-65 C56,-58 50,-55 43,-57 L30,-56 Z' })));
-    u.append(S('path', fill(pal.body, { d: 'M29,-74 L31,-85 L37,-75 Z' })));
-    u.append(S('path', fill(pal.mane2, { d: 'M27,-74 C15,-72 18,-62 9,-58 C16,-56 11,-48 5,-45 C12,-45 18,-49 22,-52 C19,-58 25,-64 31,-68 Z' })));
-    u.append(S('path', fill('#FFD84D', { d: 'M37,-76 L46,-98 L42,-74 Z' })));
-    u.append(S('circle', { cx: 42, cy: -66, r: 2.4, fill: INK }));
-    u.append(S('ellipse', { cx: 47, cy: -60, rx: 3.2, ry: 2, fill: '#FF9CC8', opacity: 0.85 }));
-    g.append(u);
-  }
-  function petSvg(pet, cls) {
-    const svg = S('svg', { viewBox: '-62 -132 124 136', 'aria-hidden': 'true' });
-    const g = S('g', { class: 'pet' + (cls ? ' ' + cls : '') });
-    pet.draw(g);
-    svg.append(g);
-    return svg;
-  }
 
   /* ── Making meal cards ── */
   // Each card: { pet, crew, unit, amt (text), who, food, note, scoops [denominators; 1 = the 1 cup],
