@@ -51,7 +51,8 @@
   /* Area diagram */
   .area-wrap { overflow-x: auto; padding-bottom: 4px; }
   .area { display: grid; gap: 0; width: max-content; min-width: min(100%, 520px); margin: 0 auto; }
-  .edge { display: flex; align-items: center; justify-content: center; padding: 6px; }
+  .edge { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; }
+  .edge .place { margin-bottom: 4px; font: 600 .8rem/1 var(--body); color: var(--violet); }
   .edge.left { padding-right: 12px; }
   .edge .given { font: 800 1.6rem/1 var(--display); color: var(--ink); }
   .region { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border: 3px solid #fff; }
@@ -62,6 +63,30 @@
   .edge.left .num { width: 3.6em; }
   @media (max-width: 640px) { .area .num { font-size: 1.1rem; } .edge.left .num { width: 3em; } .region { padding: 6px 4px; } }
   .r0 { background: #E9DDFF; } .r1 { background: #D9F5EB; } .r2 { background: #FFE3EF; } .r3 { background: #FFF2C7; }
+
+  /* The problem written vertically, with place-value columns */
+  .split { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px 30px; align-items: start; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; justify-items: center; } .split .paper-wrap { order: 2; } }
+  .solo { display: flex; justify-content: center; }
+  .paper-wrap { padding: 12px 18px 12px; border-radius: var(--radius-md); background: #F8F5FF; }
+  .paper { --cell: 1.2em; --op: 1.1em; display: grid; justify-content: start; align-items: center; row-gap: 7px; font: 800 1.85rem/1.25 var(--display); color: var(--ink); }
+  .paper .head { text-align: center; font: 600 .8rem/1 var(--body); color: var(--violet); padding-bottom: 2px; }
+  .paper .op { text-align: center; }
+  .paper .drow { display: grid; position: relative; min-height: 1.25em; border-radius: 8px; }
+  .paper .cell { text-align: center; }
+  .paper .cell + .cell { box-shadow: inset 1px 0 0 rgba(108, 79, 179, .14); }   /* faint column guides */
+  .paper .cell.q { color: #CFC3EA; }
+  .paper .rule { border-top: 4px solid var(--ink); margin: 1px 0; }
+  .paper .note { padding-left: 16px; font: 600 1rem/1.2 var(--body); color: var(--ink-soft); white-space: nowrap; }
+  .paper .drow.edit { background: #fff; outline: 3px solid var(--card-edge); outline-offset: 1px; cursor: text; }
+  .paper .drow.edit input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: text; }
+  .paper .drow.edit:focus-within { outline-color: var(--violet); box-shadow: 0 0 0 7px var(--lemon); }
+  .paper .drow.edit.waiting { background: transparent; outline: 3px dashed #DED4EF; }
+  .paper .drow.ok { background: #E7FAF3; outline-color: var(--mint); color: var(--mint-deep); }
+  .paper .drow.shown { background: #FFF0F6; outline-color: var(--bubblegum); color: var(--berry); }
+  .paper .drow.bad { background: #FFF0F6; outline-color: var(--bubblegum); animation: shake .35s; }
+  .key { margin: 10px 0 0; max-width: 24ch; font-size: .8rem; line-height: 1.35; color: var(--ink-soft); }
+  @media (max-width: 640px) { .paper { font-size: 1.5rem; } }
 
   /* Stacked partial products */
   .stack { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; gap: 8px 16px; font: 800 1.6rem/1.2 var(--display); color: var(--ink); }
