@@ -1,0 +1,73 @@
+/* Math Realm: Rectangle Kingdom drawing styles (shared by the game and the "See how it works" demo) */
+
+.problem-title { margin: 0 0 4px; text-align: center; font: 800 clamp(2.4rem, 6vw, 3.4rem)/1.1 var(--display); color: var(--ink); }
+.step { min-height: 1.6em; margin: 0 auto 18px; max-width: 60ch; text-align: center; font-weight: 600; font-size: 1.15rem; color: var(--ink-soft); }
+
+/* Number boxes */
+.num {
+  width: 5em; padding: 6px 4px; text-align: center;
+  font: 800 1.7rem/1.2 var(--display); color: var(--ink);
+  background: #fff; border: 3px solid var(--card-edge); border-radius: 12px;
+}
+.num:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 4px var(--lemon); }
+.num:disabled { background: rgba(255, 255, 255, .55); border-style: dashed; color: transparent; }
+.num.ok { color: var(--mint-deep); background: #E7FAF3; border: 3px solid var(--mint); }
+.num.bad { border-color: var(--bubblegum); background: #FFF0F6; animation: shake .35s; }
+.num.shown { color: var(--berry); background: #FFF0F6; border: 3px solid var(--bubblegum); }
+.num.ok:disabled, .num.shown:disabled { border-style: solid; }
+.num.ok:disabled { color: var(--mint-deep); }
+.num.shown:disabled { color: var(--berry); }
+.demo-now { box-shadow: 0 0 0 5px var(--lemon) !important; }
+@keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+
+/* Work column and rectangle sit together, centered, whatever the window size */
+.split { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 22px 36px; }
+@media (max-width: 900px) { .split .paper-wrap { order: 2; } }
+.solo { display: flex; justify-content: center; }
+
+/* The problem written vertically, with place-value columns */
+.paper-wrap { padding: 12px 20px 12px; border-radius: var(--radius-md); background: #F8F5FF; }
+.paper { --cell: 1.15em; --op: 1.05em; display: grid; justify-content: start; align-items: center; row-gap: 7px; font: 800 2.2rem/1.25 var(--display); color: var(--ink); }
+.paper .head { text-align: center; font: 600 .9rem/1 var(--body); color: var(--violet); padding-bottom: 2px; }
+.paper .op { text-align: center; }
+.paper .drow { display: grid; position: relative; min-height: 1.25em; border-radius: 8px; }
+.paper .cell { text-align: center; border-radius: 6px; }
+.paper .cell + .cell { box-shadow: inset 1px 0 0 rgba(108, 79, 179, .14); }   /* faint column guides */
+.paper .cell.q { color: #CFC3EA; }
+.paper .cell.next { background: #FFF1B8; box-shadow: inset 0 -4px 0 var(--gold); }   /* where the next digit goes */
+.paper .rule { border-top: 4px solid var(--ink); margin: 1px 0; }
+.paper .note { padding-left: 16px; font: 600 1.05rem/1.2 var(--body); color: var(--ink-soft); white-space: nowrap; }
+.paper .drow.edit { background: #fff; outline: 3px solid var(--card-edge); outline-offset: 1px; cursor: text; }
+.paper .drow.edit input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: text; }
+.paper .drow.edit:focus-within { outline-color: var(--violet); box-shadow: 0 0 0 7px var(--lemon); }
+.paper .drow.edit.waiting { background: transparent; outline: 3px dashed #DED4EF; }
+.paper .drow.ok { background: #E7FAF3; outline-color: var(--mint); color: var(--mint-deep); }
+.paper .drow.shown { background: #FFF0F6; outline-color: var(--bubblegum); color: var(--berry); }
+.paper .drow.bad { background: #FFF0F6; outline-color: var(--bubblegum); animation: shake .35s; }
+.key { margin: 10px 0 0; max-width: 26ch; font-size: .85rem; line-height: 1.35; color: var(--ink-soft); }
+
+/* Area diagram */
+.area-wrap { max-width: 100%; overflow-x: auto; padding: 4px 4px 6px; }
+.area { display: grid; gap: 0; width: max-content; }
+.edge { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; }
+.edge.left { padding-right: 14px; }
+.edge .place { margin-bottom: 5px; font: 600 .95rem/1 var(--body); color: var(--violet); }
+.edge .given { font: 800 2.2rem/1 var(--display); color: var(--ink); }
+.region { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; border: 3px solid #fff; }
+.region .expr { font-weight: 600; font-size: 1.1rem; color: var(--ink-soft); }
+.region .expr:empty { display: none; }
+.area .num { width: 100%; max-width: 4.6em; font-size: 1.55rem; }
+.edge.left .num { width: 3.4em; }
+.r0 { background: #E9DDFF; } .r1 { background: #D9F5EB; } .r2 { background: #FFE3EF; } .r3 { background: #FFF2C7; }
+
+/* Single answer (tens skill) */
+.single { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em; font: 800 clamp(2.6rem, 7vw, 3.8rem)/1.1 var(--display); color: var(--ink); }
+.single .num { font-size: clamp(2.2rem, 6vw, 3.2rem); width: 4.2em; }
+
+@media (max-width: 640px) {
+  .paper { font-size: 1.7rem; }
+  .area .num { font-size: 1.2rem; }
+  .edge.left .num { width: 2.8em; }
+  .region { padding: 6px 3px; }
+  .edge .place { font-size: .8rem; }
+}
