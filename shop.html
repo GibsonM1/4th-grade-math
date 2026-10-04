@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprite Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  .game { max-width: 1180px; margin: 0 auto; padding: 18px 18px 48px; }
+  .intro { margin: 0 0 16px; }
+  .intro h1 { font-size: clamp(2.1rem, 6vw, 3rem); }
+  .intro p { margin: 6px 0 0; color: var(--haze); max-width: 70ch; }
+  .tabs { display: inline-flex; gap: 6px; margin: 4px 0 18px; padding: 5px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
+  .tabs button { border: 0; border-radius: 999px; padding: 10px 20px; font: 600 1.05rem/1 var(--body); color: #fff; background: transparent; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: #fff; color: var(--violet); }
+  .note { min-height: 3em; margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius-md); background: var(--lemon); color: var(--ink); font-weight: 600; max-width: none; }
+  .note:empty { visibility: hidden; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 14px 16px; text-align: center; }
+  .item .art { display: grid; place-items: center; width: 100%; height: 140px; border-radius: var(--radius-md); background: #F6F1FF; }
+  .item .art svg { width: 120px; height: 128px; overflow: visible; }
+  .item[data-kind="unicorn"] .art svg { width: 150px; height: 128px; }
+  .item.mine .art { background: #E8F8F1; }
+  .item.equipped { box-shadow: 0 8px 0 rgba(16, 8, 46, .35), 0 0 0 4px var(--mint); }
+  .item h3 { margin-top: 8px; font-size: 1.35rem; color: var(--ink); }
+  .item .sp { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+  .price { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 4px; font: 800 1.25rem/1 var(--display); color: var(--ink); }
+  .price svg { width: 22px; height: 22px; }
+  .price.mine { font: 600 1rem/1 var(--body); color: var(--mint-deep); }
+  .acts { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; margin-top: 6px; }
+  .acts .btn { width: 100%; }
+  .acts .ask { margin: 0; font-weight: 600; color: var(--ink); }
+  .badge { padding: 9px 12px; border-radius: 12px; background: #E2F8F0; color: var(--mint-deep); font-weight: 600; }
+  .link-btn { background: none; border: 0; padding: 2px; color: var(--ink-soft); font: 600 .9rem/1.2 var(--body); text-decoration: underline; cursor: pointer; }
+  .item.pop .art svg { animation: adopt .7s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes adopt { from { transform: scale(.4) rotate(-10deg); } to { transform: none; } }
+</style>
+</head>
+<body>
+<div class="page game">
+  <header class="topbar">
+    <a class="pill" href="index.html">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back to the map
+    </a>
+    <div class="top-tools">
+      <div class="gems">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+        <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="intro">
+    <h1>Sprite Shop</h1>
+    <p>Spend your gems here. Critters you adopt come to eat at the Critter Café, and you can pick one to be your avatar on the map. Unicorn styles change how your unicorn looks when you race.</p>
+  </section>
+
+  <div class="tabs" role="tablist" aria-label="Shop sections">
+    <button type="button" role="tab" id="tabCritters" aria-selected="true">Critters</button>
+    <button type="button" role="tab" id="tabUnicorns" aria-selected="false">Unicorns</button>
+  </div>
+  <p class="note" id="note" aria-live="polite">Opening the shop…</p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/shop.js"></script>
+</body>
+</html>
