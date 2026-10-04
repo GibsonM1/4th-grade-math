@@ -18,6 +18,6 @@ window.MATH_REALM_CATALOG = {
   // ready: false shows "Opening soon" until that game is built.
   games: [
     { prefix: 'g3.',    page: 'flashcards.html', ready: true  },
-    { prefix: 'g4.u6.', page: 'area-model.html', ready: false },
+    { prefix: 'g4.u6.', page: 'area-model.html', ready: true  },
   ],
 };
