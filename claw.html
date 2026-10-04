@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Critter Claw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  .game { max-width: 1180px; margin: 0 auto; padding: 18px 18px 40px; }
+  .arcade { display: grid; grid-template-columns: minmax(0, 600px) minmax(280px, 1fr); gap: 22px 30px; align-items: start; justify-content: center; }
+  @media (max-width: 920px) { .arcade { grid-template-columns: 1fr; justify-items: center; } }
+  .machine-wrap { position: relative; width: 100%; max-width: 600px; }
+  #machine { display: block; width: 100%; height: auto; max-height: calc(100vh - 210px); }
+  .bulb { animation: blink 1s steps(1) infinite; }
+  .bulb.b2 { animation-delay: .5s; }
+  @keyframes blink { 50% { fill: #FFF6C2; } }
+  .prize-idle { animation: jiggle 3s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+  @keyframes jiggle { 50% { transform: rotate(2deg); } }
+
+  .pad { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; }
+  .joy { width: 74px; height: 64px; border: 0; border-radius: 18px; background: #fff; color: var(--violet); font: 800 2rem/1 var(--display); box-shadow: 0 6px 0 var(--card-edge); cursor: pointer; touch-action: none; user-select: none; }
+  .joy:active, .joy.held { transform: translateY(4px); box-shadow: 0 2px 0 var(--card-edge); }
+  .drop { width: 98px; height: 98px; border-radius: 50%; border: 6px solid #fff; background: radial-gradient(circle at 35% 30%, #FF8F8C, #E0524F 60%, #A8302D); color: #fff; font: 800 1.6rem/1 var(--display); letter-spacing: .04em; box-shadow: 0 8px 0 #7E1F1D; cursor: pointer; }
+  .drop:active { transform: translateY(5px); box-shadow: 0 3px 0 #7E1F1D; }
+  .joy:disabled, .drop:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  .timer { min-width: 3.2em; text-align: center; font: 800 1.8rem/1 var(--display); color: var(--lemon); }
+
+  .panel { padding: 22px 24px; }
+  .panel h1 { font-size: clamp(1.9rem, 4vw, 2.4rem); color: var(--berry); }
+  .panel p { color: var(--ink); }
+  .odds { margin: 8px 0 14px; color: var(--ink-soft) !important; font-size: .95rem; }
+  .meter-label { display: flex; justify-content: space-between; font-weight: 600; color: var(--ink); font-size: .95rem; }
+  .lucky { display: flex; gap: 4px; margin: 6px 0 4px; }
+  .lucky span { flex: 1; height: 14px; border-radius: 4px; background: #F1EBFB; }
+  .lucky span.on { background: linear-gradient(180deg, #FFE27A, #E8A90C); }
+  .lucky-note { margin: 0 0 14px; font-size: .85rem; color: var(--ink-soft) !important; }
+  .status { min-height: 3.6em; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--radius-md); background: #FFF6D6; font-weight: 600; }
+  .status.win { background: #E2F8F0; }
+  .status.miss { background: #FFE9F2; }
+  .plays { margin: 10px 0 0; font-size: .95rem; color: var(--ink-soft) !important; }
+
+  .reveal { position: absolute; inset: 8% 10%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px; text-align: center; animation: popin .5s cubic-bezier(.3, 1.5, .5, 1); }
+  .reveal[hidden] { display: none; }
+  @keyframes popin { from { transform: scale(.5); opacity: 0; } }
+  .reveal h2 { font-size: 1.9rem; color: var(--berry); }
+  .reveal .big svg { width: 150px; height: 130px; }
+  .reveal .wear svg { width: 110px; height: 120px; overflow: visible; }
+  .reveal p { margin: 0; color: var(--ink); }
+  .reveal .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="page game">
+  <header class="topbar">
+    <a class="pill" href="shop.html">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back to the shop
+    </a>
+    <div class="top-tools">
+      <button class="pill" type="button" id="musicBtn" aria-pressed="true">Music: on</button>
+      <button class="pill" type="button" id="soundBtn" aria-pressed="false">Sounds: off</button>
+      <div class="gems">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+        <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="arcade">
+    <div>
+      <div class="machine-wrap">
+        <svg id="machine" viewBox="0 0 600 600" role="img" aria-label="Claw machine full of accessories"></svg>
+        <section class="reveal card" id="reveal" hidden aria-live="polite"></section>
+      </div>
+      <div class="pad">
+        <button class="joy" type="button" id="leftBtn" aria-label="Move the claw left" disabled>◀</button>
+        <button class="drop" type="button" id="dropBtn" disabled>DROP</button>
+        <button class="joy" type="button" id="rightBtn" aria-label="Move the claw right" disabled>▶</button>
+        <span class="timer" id="timer" aria-live="off"></span>
+      </div>
+    </div>
+
+    <aside class="panel card">
+      <h1>Critter Claw</h1>
+      <p>Win hats, glasses, necklaces, bracelets and shoes for your avatar critter. Steer the claw over a prize, then press <strong>DROP</strong>. You can use the arrow keys and the space bar too.</p>
+      <p class="odds" id="odds"></p>
+      <div id="luckyBox">
+        <div class="meter-label"><span>Lucky meter</span><span id="luckyCount"></span></div>
+        <div class="lucky" id="lucky" aria-hidden="true"></div>
+        <p class="lucky-note" id="luckyNote"></p>
+      </div>
+      <p class="status" id="status" aria-live="polite">Warming up the claw…</p>
+      <button class="btn btn-big" type="button" id="playBtn" disabled>Play</button>
+      <p class="plays" id="plays"></p>
+    </aside>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/claw.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Phase 1, part 1. Version 1.0.0
+ * Version 1.4.0 (adds the claw machine and critter accessories)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -18,15 +18,19 @@
  *   ping         is the server up?
  *   login        { classCode, studentId, pin }      → token + progress
  *   logout       { token }
- *   getProgress  { token }                          → points, skills, mastery
+ *   getProgress  { token }                          → points, skills, mastery, tickets
  *   submitRound  { token, gameId, skillId, roundId, attempts: [...] }
  *   saveState    { token, gameId, state }           → a game's save data
  *   loadState    { token, gameId }
+ *   shop         { token }                          → items for sale, what you own, what's equipped
+ *   buy          { token, itemId }                  → spends gems (checked here, never trusted from the page)
+ *   equip        { token, slot, itemId }            → slot: avatar, unicorn, or an accessory slot (hat, face, neck, wrist, feet)
+ *   claw         { token, targetId }                → one play of the claw machine; the server decides win or lose
  *
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.4.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -43,7 +47,9 @@ const TABS = {
   points:   { name: 'PointsLog', headers: ['timestamp', 'studentId', 'delta', 'reason'] },
   saves:    { name: 'SaveData',  headers: ['studentId', 'gameId', 'updated', 'json'] },
   tickets:  { name: 'Tickets',   headers: ['ticketCode', 'studentId', 'studentName', 'skillId', 'skillName', 'issued', 'redeemed', 'redeemedBy', 'redeemedAt'] },
+  shop:     { name: 'Shop',      headers: ['itemId', 'name', 'kind', 'price', 'active'] },
 };
+const SHOP_SAVE = '_shop';   // each student's shop save; only the server writes it
 
 // key, default value, note shown on the Settings tab
 const DEFAULT_SETTINGS = [
@@ -57,6 +63,10 @@ const DEFAULT_SETTINGS = [
   ['maxAttemptsPerRound',    60,   'Answers past this number in one round are ignored'],
   ['failedLoginsPerStudent', 8,    'Wrong tries before that student ID is locked for 10 minutes'],
   ['failedLoginsPerClass',   60,   'Failed tries on one class code before the whole class code is locked for 10 minutes'],
+  ['clawCost',               40,   'Gems for one try at the claw machine'],
+  ['clawWinRate',            0.1,  'Chance a grab wins (0.1 = about 1 in 10)'],
+  ['clawPityAfter',          12,   'Lucky meter: a guaranteed prize after this many misses in a row (0 = off)'],
+  ['clawDailyLimit',         10,   'Most claw machine tries per student per day (0 = no limit)'],
 ];
 
 // skillId, name, zone, minItems, minAccuracy, maxMedianMs (blank = no speed check), daysNeeded, milestone (golden ticket)
@@ -77,7 +87,60 @@ const DEFAULT_SKILLS = [
   ['g4.u6.area1',    'Area diagrams: multi-digit × 1-digit',             'Unit 6',            6, 0.8, '',   3, false],
   ['g4.u6.area2',    'Area diagrams: 2-digit × 2-digit',                 'Unit 6',            6, 0.8, '',   3, true],
   ['g4.u6.partial2', 'Partial products: 2-digit × 2-digit, no diagram',  'Unit 6',            6, 0.8, '',   3, true],
+  ['g4.dec.tenths',     'Race with tenths (0.7 + 0.6)',                  'Decimals',          6, 0.8, '',   3, false],
+  ['g4.dec.hundredths', 'Race with hundredths (0.47 + 0.25)',            'Decimals',          6, 0.8, '',   3, false],
+  ['g4.dec.mixed',      'Race with tenths and hundredths (0.4 + 0.25)',  'Decimals',          6, 0.8, '',   3, true],
+  ['g4.frac.build',     'Build fractions with scoops (3/4 = 1/4 + 1/4 + 1/4)', 'Fractions',  8, 0.8, '',   3, false],
+  ['g4.frac.equiv',     'Equivalent fractions (2/4 = 4/8)',                    'Fractions',  8, 0.8, '',   3, true],
+  ['g4.frac.mixed',     'More than a cup (1 3/4 = 7/4)',                       'Fractions',  8, 0.8, '',   3, false],
+  ['g4.frac.times',     'Feed a group (3 × 2/3 cup)',                          'Fractions',  8, 0.8, '',   3, true],
+  ['g4.frac.kg',        'Kitchen scale: tenths and hundredths of a kilogram',  'Fractions',  8, 0.8, '',   3, false],
 ];
+
+// itemId, name, kind (critter = a pet for the café and your avatar; unicorn = your race style), price in gems.
+// Price 0 means everyone has it. Change prices or turn items off on the Shop tab.
+const DEFAULT_SHOP = [
+  ['bunbun',   'Bun-bun the bunny',         'critter', 0],
+  ['comet',    'Comet the unicorn',         'critter', 0],
+  ['pip',      'Pip the puppy',             'critter', 0],
+  ['miso',     'Miso the kitten',           'critter', 0],
+  ['shelly',   'Shelly the turtle',         'critter', 0],
+  ['ember',    'Ember the fox',             'critter', 150],
+  ['biscuit',  'Biscuit the hamster',       'critter', 150],
+  ['lily',     'Lily the frog',             'critter', 200],
+  ['hoot',     'Hoot the owl',              'critter', 200],
+  ['prickles', 'Prickles the hedgehog',     'critter', 250],
+  ['bao',      'Bao the panda',             'critter', 300],
+  ['mochi',    'Mochi the axolotl',         'critter', 350],
+  ['sparky',   'Sparky the baby dragon',    'critter', 500],
+  ['u-classic',  'Classic unicorn',         'unicorn', 0],
+  ['u-sunset',   'Sunset unicorn',          'unicorn', 200],
+  ['u-ocean',    'Ocean unicorn',           'unicorn', 200],
+  ['u-candy',    'Cotton candy unicorn',    'unicorn', 300],
+  ['u-midnight', 'Midnight unicorn',        'unicorn', 300],
+  ['u-rainbow',  'Rainbow unicorn',         'unicorn', 500],
+  // Accessories are claw machine prizes only. The part before the dash is the slot they go in.
+  ['hat-crown',      'Sparkle crown',        'accessory', 0],
+  ['hat-bow',        'Big pink bow',         'accessory', 0],
+  ['hat-wizard',     'Star wizard hat',      'accessory', 0],
+  ['hat-flowers',    'Flower crown',         'accessory', 0],
+  ['hat-party',      'Party hat',            'accessory', 0],
+  ['hat-beanie',     'Pom-pom beanie',       'accessory', 0],
+  ['face-hearts',    'Heart glasses',        'accessory', 0],
+  ['face-stars',     'Star glasses',         'accessory', 0],
+  ['neck-pearls',    'Pearl necklace',       'accessory', 0],
+  ['neck-locket',    'Heart locket',         'accessory', 0],
+  ['neck-bandana',   'Bandana',              'accessory', 0],
+  ['neck-bowtie',    'Bow tie',              'accessory', 0],
+  ['neck-scarf',     'Star scarf',           'accessory', 0],
+  ['wrist-friend',   'Friendship bracelet',  'accessory', 0],
+  ['wrist-charm',    'Charm bracelet',       'accessory', 0],
+  ['feet-sneakers',  'Sneakers',             'accessory', 0],
+  ['feet-boots',     'Rain boots',           'accessory', 0],
+  ['feet-sparkle',   'Sparkle slippers',     'accessory', 0],
+];
+const ACCESSORY_SLOTS = ['hat', 'face', 'neck', 'wrist', 'feet'];
+const slotOf_ = itemId => String(itemId).split('-')[0];
 
 class AppError extends Error {
   constructor(code) { super(code); this.code = code; }
@@ -116,6 +179,10 @@ const ROUTES = {
   submitRound: submitRound_,
   saveState:   saveState_,
   loadState:   loadState_,
+  shop:        shop_,
+  buy:         buy_,
+  equip:       equip_,
+  claw:        claw_,
 };
 
 
@@ -292,6 +359,7 @@ function saveState_(req) {
   const who = auth_(req);
   const gameId = idSafe_(req.gameId, 40);
   if (!gameId || req.state === undefined) throw new AppError('missing_fields');
+  if (gameId.charAt(0) === '_') throw new AppError('reserved');   // e.g. the shop save: only the server writes it
   const json = JSON.stringify(req.state);
   if (json.length > MAX_SAVE_CHARS) throw new AppError('state_too_large');
 
@@ -326,6 +394,150 @@ function loadState_(req) {
 }
 
 
+/* ───────────── Sprite Shop ───────────── */
+
+function shopItems_() {
+  return table_(TABS.shop).rows
+    .filter(r => String(r.itemId).trim() && !(r.active === false || /^(false|no|n|0)$/i.test(String(r.active).trim())))
+    .map(r => ({ itemId: String(r.itemId).trim(), name: String(r.name).trim(), kind: String(r.kind).trim(), price: Math.max(0, Math.round(num_(r.price))) }));
+}
+function readShopSave_(studentId) {
+  const found = findSaveRow_(studentId, SHOP_SAVE);
+  let st = null;
+  if (found.row >= 0) {
+    try { st = JSON.parse(String(found.sh.getRange(found.row, found.col.json + 1).getValues()[0][0] || 'null')); } catch (e) { st = null; }
+  }
+  st = st || {};
+  return { owned: Array.isArray(st.owned) ? st.owned : [], equipped: st.equipped || {}, claw: st.claw || null };
+}
+function writeShopSave_(studentId, st) {
+  const found = findSaveRow_(studentId, SHOP_SAVE);
+  const json = JSON.stringify(st);
+  if (found.row < 0) appendRows_(TABS.saves, [{ studentId: studentId, gameId: SHOP_SAVE, updated: new Date(), json: json }]);
+  else {
+    found.sh.getRange(found.row, found.col.updated + 1).setValue(new Date());
+    found.sh.getRange(found.row, found.col.json + 1).setValue(json);
+  }
+}
+
+function shop_(req) {
+  const who = auth_(req);
+  const rt = table_(TABS.roster);
+  const row = rt.rows[rosterIndex_(rt, who)];
+  const mine = readShopSave_(who.studentId);
+  const S = settings_();
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const c = mine.claw || {};
+  const plays = c.day === today ? c.plays : 0;
+  return {
+    items: shopItems_(), owned: mine.owned, equipped: mine.equipped, balance: num_(row.points),
+    claw: { cost: Math.round(S.clawCost), winRate: S.clawWinRate, pityAfter: S.clawPityAfter, misses: c.misses || 0,
+            playsLeft: S.clawDailyLimit > 0 ? Math.max(0, S.clawDailyLimit - plays) : null },
+  };
+}
+
+function buy_(req) {
+  const who = auth_(req);
+  const itemId = idSafe_(req.itemId, 40);
+  const item = shopItems_().find(i => i.itemId === itemId);
+  if (!item) throw new AppError('unknown_item');
+  if (item.kind === 'accessory') throw new AppError('claw_only');
+  if (item.price <= 0) throw new AppError('already_owned');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new AppError('busy');
+  try {
+    const mine = readShopSave_(who.studentId);
+    if (mine.owned.indexOf(itemId) >= 0) throw new AppError('already_owned');
+    const rt = table_(TABS.roster);
+    const ri = rosterIndex_(rt, who);
+    const balance = num_(rt.rows[ri].points);
+    if (balance < item.price) throw new AppError('not_enough_gems');
+    const now = new Date();
+    rt.update(ri, { points: balance - item.price });            // lifetime points stay the same
+    appendRows_(TABS.points, [{ timestamp: now, studentId: who.studentId, delta: -item.price, reason: 'Shop: ' + item.name }]);
+    mine.owned.push(itemId);
+    writeShopSave_(who.studentId, mine);
+    return { balance: balance - item.price, owned: mine.owned, equipped: mine.equipped, item: item };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function equip_(req) {
+  const who = auth_(req);
+  const slot = clean_(req.slot, 20);
+  const kindFor = { avatar: 'critter', unicorn: 'unicorn' };
+  ACCESSORY_SLOTS.forEach(s => { kindFor[s] = 'accessory'; });
+  if (!kindFor[slot]) throw new AppError('bad_slot');
+  const itemId = idSafe_(req.itemId, 40);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new AppError('busy');
+  try {
+    const mine = readShopSave_(who.studentId);
+    if (itemId) {
+      const item = shopItems_().find(i => i.itemId === itemId);
+      if (!item || item.kind !== kindFor[slot]) throw new AppError('unknown_item');
+      if (item.kind === 'accessory' && slotOf_(itemId) !== slot) throw new AppError('bad_slot');
+      const free = item.price === 0 && item.kind !== 'accessory';
+      if (!free && mine.owned.indexOf(itemId) < 0) throw new AppError('not_owned');
+      mine.equipped[slot] = itemId;
+    } else {
+      delete mine.equipped[slot];
+    }
+    writeShopSave_(who.studentId, mine);
+    return { owned: mine.owned, equipped: mine.equipped };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ───────────── Claw machine ─────────────
+ * The page sends which prize the claw closed on (or none). The server charges the
+ * gems, then decides: a miss if the claw closed on nothing or on a prize the student
+ * already has; otherwise a win with chance clawWinRate, or for sure once the lucky
+ * meter fills (clawPityAfter misses in a row). It also enforces clawDailyLimit.
+ */
+function claw_(req) {
+  const who = auth_(req);
+  const S = settings_();
+  const cost = Math.max(0, Math.round(S.clawCost));
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new AppError('busy');
+  try {
+    const mine = readShopSave_(who.studentId);
+    const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    const c = mine.claw && mine.claw.day === today ? mine.claw : { day: today, plays: 0, misses: (mine.claw && mine.claw.misses) || 0 };
+    if (S.clawDailyLimit > 0 && c.plays >= S.clawDailyLimit) throw new AppError('claw_limit');
+
+    const prizes = shopItems_().filter(i => i.kind === 'accessory' && mine.owned.indexOf(i.itemId) < 0);
+    if (!prizes.length) throw new AppError('claw_empty');
+    const rt = table_(TABS.roster);
+    const ri = rosterIndex_(rt, who);
+    const balance = num_(rt.rows[ri].points);
+    if (balance < cost) throw new AppError('not_enough_gems');
+
+    const target = prizes.find(i => i.itemId === idSafe_(req.targetId, 40));
+    const lucky = S.clawPityAfter > 0 && c.misses + 1 >= S.clawPityAfter;
+    const win = !!target && (lucky || Math.random() < S.clawWinRate);
+
+    const now = new Date();
+    rt.update(ri, { points: balance - cost });
+    appendRows_(TABS.points, [{ timestamp: now, studentId: who.studentId, delta: -cost, reason: win ? 'Claw machine: won ' + target.name : 'Claw machine' }]);
+    c.plays++;
+    c.misses = win ? 0 : c.misses + 1;
+    if (win) mine.owned.push(target.itemId);
+    mine.claw = c;
+    writeShopSave_(who.studentId, mine);
+    return {
+      win: win, item: win ? target : null, balance: balance - cost, owned: mine.owned, equipped: mine.equipped,
+      cost: cost, playsLeft: S.clawDailyLimit > 0 ? S.clawDailyLimit - c.plays : null,
+      misses: c.misses, pityAfter: S.clawPityAfter, prizesLeft: prizes.length - (win ? 1 : 0),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ───────────── Progress and golden tickets ───────────── */
 
 function progressFor_(studentId, row) {
@@ -335,10 +547,24 @@ function progressFor_(studentId, row) {
       mastery[String(m.skillId).trim()] = { status: String(m.status).trim(), days: daysList_(m.qualifyingDays).length };
     }
   });
+  // Students can look up their own golden ticket codes on the home page.
+  const tickets = [];
+  table_(TABS.tickets).rows.forEach(t => {
+    if (sameId_(t.studentId, studentId) && String(t.ticketCode).trim()) {
+      tickets.push({
+        code: String(t.ticketCode).trim(),
+        skillName: String(t.skillName || '').trim(),
+        issued: t.issued instanceof Date ? t.issued.toISOString() : null,
+        redeemed: bool_(t.redeemed),
+      });
+    }
+  });
   return {
     student: { displayName: displayName_(row), points: num_(row.points), lifetimePoints: num_(row.lifetimePoints) },
     skills: skillsList_(),
     mastery: mastery,
+    tickets: tickets,
+    shop: readShopSave_(studentId),
   };
 }
 
@@ -456,12 +682,25 @@ function table_(tab) {
 function appendRows_(tab, objs) {
   if (!objs || !objs.length) return;
   const sh = sheet_(tab);
-  const headers = headerMap_(sh, tab).headers;
+  const map = headerMap_(sh, tab);
+  const headers = map.headers;
   const data = objs.map(o => headers.map(h => (h && Object.prototype.hasOwnProperty.call(o, h)) ? o[h] : ''));
-  const start = sh.getLastRow() + 1;
+  const start = lastDataRow_(sh, map.col[tab.headers[0]]) + 1;
   const overflow = start + data.length - 1 - sh.getMaxRows();
   if (overflow > 0) sh.insertRowsAfter(sh.getMaxRows(), overflow + 500);
   sh.getRange(start, 1, data.length, headers.length).setValues(data);
+}
+
+// The last row with something in the tab's ID column. Checkbox columns can make
+// getLastRow() report the bottom of the sheet even when those rows are empty.
+function lastDataRow_(sh, colIndex) {
+  const last = sh.getLastRow();
+  if (last < 2) return last;
+  const vals = sh.getRange(1, colIndex + 1, last, 1).getValues();
+  for (let r = last - 1; r >= 0; r--) {
+    if (String(vals[r][0]).trim() !== '') return r + 1;
+  }
+  return 0;
 }
 
 function findSaveRow_(studentId, gameId) {
@@ -557,11 +796,15 @@ function setupSheets() {
   checkboxColumns_(TABS.roster,  ['disabled']);
   checkboxColumns_(TABS.skills,  ['milestone']);
   checkboxColumns_(TABS.tickets, ['redeemed']);
+  checkboxColumns_(TABS.shop, ['active']);
+  textColumns_(TABS.shop, ['itemId']);
 
-  seedIfEmpty_(TABS.settings, DEFAULT_SETTINGS.map(r => ({ key: r[0], value: r[1], notes: r[2] })));
-  seedIfEmpty_(TABS.skills, DEFAULT_SKILLS.map(r => ({
-    skillId: r[0], name: r[1], zone: r[2], minItems: r[3], minAccuracy: r[4], maxMedianMs: r[5], daysNeeded: r[6], milestone: r[7],
-  })));
+  // Adds any built-in setting missing from the Settings tab; values you changed are kept.
+  const haveKeys = {};
+  table_(TABS.settings).rows.forEach(r => { haveKeys[String(r.key).trim()] = true; });
+  appendRows_(TABS.settings, DEFAULT_SETTINGS.filter(r => !haveKeys[r[0]]).map(r => ({ key: r[0], value: r[1], notes: r[2] })));
+  addMissingSkills_();
+  addMissingShopItems_();
   seedIfEmpty_(TABS.roster, [{
     studentId: 'TEST1', studentName: 'Test Student', displayName: 'Tester', classCode: 'DEMO', pin: '1234',
     disabled: false, points: 0, lifetimePoints: 0, lastLogin: '',
@@ -601,8 +844,28 @@ function ensureTab_(ss, tab) {
   sh.getRange(1, 1, 1, sh.getLastColumn()).setFontWeight('bold').setBackground('#EFE7FB');
 }
 
+// Adds any built-in skill that isn't on the Skills tab yet. Never changes rows that are already there,
+// so your edits to existing skills are kept.
+function addMissingSkills_() {
+  const have = {};
+  table_(TABS.skills).rows.forEach(r => { const id = String(r.skillId).trim(); if (id) have[id] = true; });
+  const missing = DEFAULT_SKILLS.filter(r => !have[r[0]]).map(r => ({
+    skillId: r[0], name: r[1], zone: r[2], minItems: r[3], minAccuracy: r[4], maxMedianMs: r[5], daysNeeded: r[6], milestone: r[7],
+  }));
+  appendRows_(TABS.skills, missing);
+  return missing.length;
+}
+
+// Adds any built-in shop item that isn't on the Shop tab yet; your price changes are kept.
+function addMissingShopItems_() {
+  const have = {};
+  table_(TABS.shop).rows.forEach(r => { const id = String(r.itemId).trim(); if (id) have[id] = true; });
+  appendRows_(TABS.shop, DEFAULT_SHOP.filter(r => !have[r[0]]).map(r => ({ itemId: r[0], name: r[1], kind: r[2], price: r[3], active: true })));
+}
+
 function seedIfEmpty_(tab, objs) {
-  if (sheet_(tab).getLastRow() <= 1) appendRows_(tab, objs);
+  const sh = sheet_(tab);
+  if (lastDataRow_(sh, headerMap_(sh, tab).col[tab.headers[0]]) <= 1) appendRows_(tab, objs);
 }
 
 function textColumns_(tab, names) {

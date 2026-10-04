@@ -55,6 +55,9 @@
     unknown_item:    "That item isn't in the shop. It may have been turned off on the Shop tab.",
     reserved:        'That save name is reserved for the server.',
     bad_slot:        'Unknown equip slot.',
+    claw_only:       'Accessories come only from the claw machine.',
+    claw_limit:      'The daily claw machine limit was reached (Settings tab: clawDailyLimit).',
+    claw_empty:      'Every active claw machine prize has been won.',
   };
   // Messages students see
   const STUDENT_MESSAGES = {
@@ -71,6 +74,9 @@
     already_owned:   "That one is already yours!",
     not_owned:       "You'll need to adopt that one first.",
     unknown_item:    "That one isn't in the shop right now.",
+    claw_only:       'Accessories come from the Critter Claw machine!',
+    claw_limit:      "That's all the claw machine plays for today. Come back tomorrow!",
+    claw_empty:      "You've won every prize in the machine. Amazing!",
   };
 
   function readSession() {
@@ -280,6 +286,16 @@
     shop() { return call('shop', {}, 2); },
     async buy(itemId) {
       const data = await call('buy', { itemId: itemId }, 0);   // never retried, so nothing is bought twice
+      if (data.ok && session) {
+        session.student.points = data.balance;
+        session.shop = { owned: data.owned, equipped: data.equipped };
+        writeSession(session);
+      }
+      return data;
+    },
+    // One claw machine play. Never retried, so gems are never charged twice.
+    async claw(targetId) {
+      const data = await call('claw', { targetId: targetId || '' }, 0);
       if (data.ok && session) {
         session.student.points = data.balance;
         session.shop = { owned: data.owned, equipped: data.equipped };

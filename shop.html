@@ -35,6 +35,16 @@
   .acts .ask { margin: 0; font-weight: 600; color: var(--ink); }
   .badge { padding: 9px 12px; border-radius: 12px; background: #E2F8F0; color: var(--mint-deep); font-weight: 600; }
   .link-btn { background: none; border: 0; padding: 2px; color: var(--ink-soft); font: 600 .9rem/1.2 var(--body); text-decoration: underline; cursor: pointer; }
+  .claw-ad { display: flex; align-items: center; gap: 20px; margin: 0 0 20px; padding: 16px 22px; color: var(--ink); text-decoration: none; background: linear-gradient(120deg, #FFF1F8, #F3EDFF); transition: transform .15s ease; }
+  .claw-ad:hover { transform: translateY(-3px); }
+  .claw-ad svg { flex: none; width: 96px; height: 104px; }
+  .claw-ad h2 { font-size: 1.7rem; color: var(--berry); }
+  .claw-ad p { margin: 4px 0 10px; color: var(--ink-soft); }
+  .item[data-kind="accessory"] .art svg { width: 110px; height: 96px; }
+  .item.locked .art svg { filter: grayscale(1) opacity(.45); }
+  .wearing { display: flex; align-items: center; gap: 16px; margin: 0 0 16px; padding: 12px 18px; }
+  .wearing svg { width: 90px; height: 98px; overflow: visible; }
+  .wearing p { margin: 0; color: var(--ink); }
   .item.pop .art svg { animation: adopt .7s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes adopt { from { transform: scale(.4) rotate(-10deg); } to { transform: none; } }
 </style>
@@ -47,6 +57,8 @@
       Back to the map
     </a>
     <div class="top-tools">
+      <button class="pill" type="button" id="musicBtn" aria-pressed="true">Music: on</button>
+      <button class="pill" type="button" id="soundBtn" aria-pressed="false">Sounds: off</button>
       <div class="gems">
         <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
         <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
@@ -59,11 +71,32 @@
     <p>Spend your gems here. Critters you adopt come to eat at the Critter Café, and you can pick one to be your avatar on the map. Unicorn styles change how your unicorn looks when you race.</p>
   </section>
 
+  <a class="claw-ad card" href="claw.html">
+    <svg viewBox="0 0 120 130" aria-hidden="true">
+      <rect x="6" y="4" width="108" height="122" rx="14" fill="#FF7EB6" stroke="#2A1F45" stroke-width="3"/>
+      <rect x="16" y="10" width="88" height="18" rx="7" fill="#6C4FB3"/>
+      <rect x="16" y="34" width="88" height="66" rx="6" fill="#DDF1FF" stroke="#2A1F45" stroke-width="2"/>
+      <line x1="60" y1="36" x2="60" y2="58" stroke="#2A1F45" stroke-width="2"/>
+      <rect x="53" y="56" width="14" height="9" rx="3" fill="#B9C3D6" stroke="#2A1F45" stroke-width="2"/>
+      <path d="M55,65 C49,70 50,76 54,79 M65,65 C71,70 70,76 66,79" fill="none" stroke="#2A1F45" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="34" cy="92" r="9" fill="#FFF1B8"/><circle cx="52" cy="94" r="8" fill="#C9F0E2"/><circle cx="72" cy="93" r="9" fill="#FFC2DD"/><circle cx="88" cy="92" r="7" fill="#D9CCF6"/>
+      <path d="M28,90 L28,82 L32,86 L36,80 L40,86 L44,82 L44,90 Z" fill="#FFD84D" stroke="#2A1F45" stroke-width="1.5"/>
+      <rect x="16" y="104" width="88" height="16" rx="5" fill="#C2477F"/>
+    </svg>
+    <div>
+      <h2>Critter Claw</h2>
+      <p>Grab hats, glasses, necklaces, bracelets and shoes for your avatar. Can you win them all?</p>
+      <span class="btn btn-small">Play the claw machine</span>
+    </div>
+  </a>
+
   <div class="tabs" role="tablist" aria-label="Shop sections">
     <button type="button" role="tab" id="tabCritters" aria-selected="true">Critters</button>
     <button type="button" role="tab" id="tabUnicorns" aria-selected="false">Unicorns</button>
+    <button type="button" role="tab" id="tabAcc" aria-selected="false">Accessories</button>
   </div>
   <p class="note" id="note" aria-live="polite">Opening the shop…</p>
+  <section class="wearing card" id="wearing" hidden></section>
   <div class="grid" id="grid"></div>
 </div>
 

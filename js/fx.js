@@ -4,7 +4,9 @@
  *   RealmFX.correct()  RealmFX.wrong()  RealmFX.fanfare()  RealmFX.confetti()
  *   RealmFX.soundOn / RealmFX.toggleSound()        sound effects start OFF
  *   RealmMusic.on   / RealmMusic.toggle()          music starts ON (after the first click)
- *   RealmMusic.setTheme('race')                    pick the music for a page: 'calm' (default) or 'race'
+ *   RealmMusic.setTheme('race')                    pick the music for a page: 'calm' (default), 'race', 'shop' or 'arcade'
+ *   RealmMusic.duck(true/false)                    softens the music for a suspenseful moment
+ *   RealmFX.whirr(ms) clunk() grab() drumroll(ms) aww()   claw machine sounds
  *   RealmFX.gallop(ms)                             hoofbeats while a unicorn runs
  *
  * The music is original and made in the browser: a slow, dreamy chord loop
@@ -107,6 +109,34 @@
         });
       }
     },
+    whirr(ms) {                                   // the claw's motor
+      if (!soundOn) return;
+      const a = audio(); if (!a) return;
+      const t = a.currentTime, osc = a.createOscillator(), lp = a.createBiquadFilter(), g = a.createGain();
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(90, t); osc.frequency.linearRampToValueAtTime(110, t + ms / 1000);
+      lp.type = 'lowpass'; lp.frequency.value = 700;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.035, t + 0.05);
+      g.gain.setValueAtTime(0.035, t + ms / 1000 - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+      osc.connect(lp).connect(g).connect(a.destination); osc.start(t); osc.stop(t + ms / 1000 + 0.05);
+    },
+    clunk() { if (!soundOn) return; note(70, 0, 0.18, 'sine', 0.2); note(180, 0, 0.06, 'square', 0.04); },
+    grab() { if (!soundOn) return; note(880, 0, 0.05, 'square', 0.05); note(660, 0.05, 0.08, 'square', 0.05); },
+    drumroll(ms) {
+      if (!soundOn) return;
+      const a = audio(); if (!a) return;
+      const n = Math.floor(ms / 55);
+      for (let i = 0; i < n; i++) {
+        const t = a.currentTime + i * 0.055, src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain();
+        src.buffer = noiseBuffer(a); bp.type = 'bandpass'; bp.frequency.value = 1800;
+        const v = 0.05 + 0.15 * i / n;   // builds up
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+        src.connect(bp).connect(g).connect(a.destination); src.start(t, Math.random() * 0.5, 0.06);
+      }
+    },
+    aww() {                                       // so close!
+      if (!soundOn) return;
+      [392, 370, 349, 311].forEach((f, i) => note(f, i * 0.22, i === 3 ? 0.6 : 0.24, 'triangle', 0.08));
+    },
     fanfare() {
       if (!soundOn) return;
       [523.3, 659.3, 784, 1046.5].forEach((f, i) => note(f, i * 0.11, 0.35, 'triangle', 0.1));
@@ -155,6 +185,22 @@
       chords: [[62, 66, 69], [64, 68, 71], [59, 62, 66], [57, 61, 64], [55, 59, 62], [64, 68, 71], [62, 66, 69], [57, 61, 64]],
       patterns: [[0, 1, 2, 4, 3, 4, 2, 1], [0, 2, 4, 5, 4, 2, 1, 2], [2, 1, 0, 1, 2, 4, 5, 4], [0, 1, 2, 3, 4, 3, 2, 1]],
       sparkle: [86, 88, 90, 92, 93, 95],
+    },
+    // Sprite Shop: a magical candy store. Swung, bouncy glockenspiel over an oom-pah plucked bass.
+    shop: {
+      bpm: 112, swing: 0.2, restChance: 0.1, sparkleRate: 0.2, padVol: 0.02, arpVol: 0.065, bassVol: 0.11, drums: 'tick',
+      arpType: 'sine', arpOctave: 24, arpLen: 0.45, bassStyle: 'oompah',
+      chords: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62], [60, 64, 67], [62, 65, 69], [55, 59, 62], [60, 64, 67]],
+      patterns: [[0, 2, 4, null, 3, null, 4, 2], [4, null, 3, 2, 1, null, 0, null], [0, 4, 3, 4, 2, 4, 1, 4], [2, null, 2, 4, null, 3, 1, null]],
+      sparkle: [96, 98, 100, 103, 105],
+    },
+    // Claw machine: chiptune arcade loop.
+    arcade: {
+      bpm: 132, restChance: 0, sparkleRate: 0.05, padVol: 0, arpVol: 0.034, bassVol: 0.1, drums: 'arcade',
+      arpType: 'square', arpOctave: 12, arpLen: 0.16, bassStyle: 'bounce', bassType: 'square',
+      chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62], [57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59]],
+      patterns: [[0, 1, 2, 3, 2, 1, 2, 4], [0, 2, 1, 3, 2, 4, 3, 5], [4, 3, 2, 1, 2, 3, 4, 5], [0, 0, 2, 2, 1, 1, 3, 3]],
+      sparkle: [84, 88, 91, 96],
     },
   };
   let theme = THEMES.calm;
@@ -230,26 +276,39 @@
     const bar = Math.floor(s / 8) % T.chords.length;
     const beat = s % 8;
     const chord = T.chords[bar];
+    if (T.swing && beat % 2 === 1) at += stepLen() * T.swing;   // a lilting, skipping feel
     if (beat === 0) {
       pattern = Math.random() < T.restChance ? null : T.patterns[Math.floor(Math.random() * T.patterns.length)];
       const barLen = stepLen() * 8;
-      chord.forEach(m => {                       // soft pad
+      if (T.padVol) chord.forEach(m => {         // soft pad
         voice(a, hz(m), at, barLen + 1.6, { type: 'sine', vol: T.padVol, attack: 1.0, hold: barLen - 0.2 });
         voice(a, hz(m), at, barLen + 1.6, { type: 'triangle', vol: T.padVol * 0.36, attack: 1.2, hold: barLen - 0.2, detune: 6 });
       });
-      voice(a, hz(chord[0] - 24), at, 2.4, { type: 'sine', vol: T.bassVol, attack: 0.05 });   // low root
     }
-    if (beat === 4) voice(a, hz(chord[0] - 24), at, 1.8, { type: 'sine', vol: T.bassVol * 0.65, attack: 0.05 });
-    if (T.drums) {
+    if (T.bassStyle === 'oompah') {               // candy store: root on 1, chord tones on the off-beats
+      if (beat % 2 === 0) voice(a, hz((beat % 4 === 0 ? chord[0] : chord[2]) - 24), at, 0.28, { type: 'triangle', vol: T.bassVol, attack: 0.005 });
+    } else if (T.bassStyle === 'bounce') {        // arcade: root and octave, every eighth
+      voice(a, hz(chord[0] - (beat % 2 ? 12 : 24)), at, 0.14, { type: T.bassType || 'square', vol: T.bassVol * 0.5, attack: 0.004 });
+    } else {
+      if (beat === 0) voice(a, hz(chord[0] - 24), at, 2.4, { type: 'sine', vol: T.bassVol, attack: 0.05 });   // low root
+      if (beat === 4) voice(a, hz(chord[0] - 24), at, 1.8, { type: 'sine', vol: T.bassVol * 0.65, attack: 0.05 });
+    }
+    if (T.drums === true) {
       if (beat === 0 || beat === 4) kick(a, at);
       if (beat === 6 && Math.random() < 0.5) kick(a, at);
       if (beat % 2 === 1) shaker(a, at, 0.018);
       else shaker(a, at, 0.008);
+    } else if (T.drums === 'tick') {             // a little woodblock on 2 and 4
+      if (beat === 2 || beat === 6) shaker(a, at, 0.02);
+    } else if (T.drums === 'arcade') {
+      if (beat === 0 || beat === 4) kick(a, at);
+      if (beat === 2 || beat === 6) shaker(a, at, 0.035);
+      if (beat % 2 === 1) shaker(a, at, 0.01);
     }
-    if (pattern && pattern[beat] != null) {      // music box / harp
+    if (pattern && pattern[beat] != null) {      // music box / harp / glockenspiel / chip lead
       const i = pattern[beat];
-      const m = chord[i % 3] + 12 + (i >= 3 ? 12 : 0);
-      voice(a, hz(m), at, T.drums ? 0.6 : 0.9, { type: 'triangle', vol: T.arpVol, attack: 0.008 });
+      const m = chord[i % 3] + (T.arpOctave != null ? T.arpOctave : 12) + (i >= 3 ? 12 : 0);
+      voice(a, hz(m), at, T.arpLen || (T.drums ? 0.6 : 0.9), { type: T.arpType || 'triangle', vol: T.arpVol, attack: 0.006 });
     }
     if (beat % 2 === 1 && Math.random() < T.sparkleRate) {  // the odd sparkle
       voice(a, hz(T.sparkle[Math.floor(Math.random() * T.sparkle.length)]), at, 1.4, { type: 'sine', vol: 0.014, attack: 0.005 });
@@ -310,6 +369,13 @@
   window.RealmMusic = {
     get on() { return musicOn; },
     setTheme(name) { if (THEMES[name]) theme = THEMES[name]; },
+    duck(on) {
+      if (!bus || !ctx || !playing) return;
+      const t = ctx.currentTime;
+      bus.master.gain.cancelScheduledValues(t);
+      bus.master.gain.setValueAtTime(Math.max(bus.master.gain.value, 0.0001), t);
+      bus.master.gain.exponentialRampToValueAtTime(on ? 0.18 : 0.8, t + 0.5);
+    },
     // Renders the music offline (used to make a preview recording).
     renderPreview(seconds, name) {
       if (name) this.setTheme(name);

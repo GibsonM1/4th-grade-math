@@ -4,12 +4,23 @@
  * so gems can't be faked from the page. Drawings come from js/sprites.js.
  *   critter  adopted critters visit the Critter Café; one can be your avatar on the map
  *   unicorn  a style for your unicorn on the Unicorn Racetrack
+ *   accessory  won in the Critter Claw (claw.html); worn by your avatar critter
  */
 (function () {
   'use strict';
   if (!MathRealm.requireLogin()) return;
 
   const C = window.MATH_REALM_CATALOG;
+  const SLOT_WORD = { hat: 'hat', face: 'glasses', neck: 'necklace', wrist: 'bracelet', feet: 'shoes' };
+  RealmMusic.setTheme('shop');
+  [
+    { btn: document.querySelector('#soundBtn'), label: 'Sounds', get: () => RealmFX.soundOn, flip: () => RealmFX.toggleSound() },
+    { btn: document.querySelector('#musicBtn'), label: 'Music', get: () => RealmMusic.on, flip: () => RealmMusic.toggle() },
+  ].forEach(t => {
+    const paint = () => { t.btn.textContent = t.label + ': ' + (t.get() ? 'on' : 'off'); t.btn.setAttribute('aria-pressed', String(t.get())); };
+    paint();
+    t.btn.addEventListener('click', () => { t.flip(); paint(); t.btn.blur(); });
+  });
   const $ = s => document.querySelector(s);
   const GEM = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#2A1F45" stroke-width="2" stroke-linejoin="round"/></svg>';
   let items = [], owned = [], equipped = {}, balance = 0, tab = 'critter', asking = null, busy = false;
@@ -35,42 +46,57 @@
   $('#gemName').textContent = C.pointsName;
   setGems((MathRealm.student || {}).points || 0);
 
-  const isMine = it => it.price === 0 || owned.indexOf(it.itemId) >= 0;
+  // Accessories are only ever won, never free; price 0 means "everyone has it" for the rest.
+  const isMine = it => (it.kind !== 'accessory' && it.price === 0) || owned.indexOf(it.itemId) >= 0;
+  const slotOf = it => (RealmSprites.accessory(it.itemId) || {}).slot;
   function isEquipped(it) {
     if (it.kind === 'critter') return equipped.avatar === it.itemId;
+    if (it.kind === 'accessory') return equipped[slotOf(it)] === it.itemId;
     return (equipped.unicorn || 'u-classic') === it.itemId;
   }
 
   function art(it) {
     if (it.kind === 'unicorn') return RealmSprites.unicornSvg(it.itemId);
+    if (it.kind === 'accessory') return RealmSprites.accessory(it.itemId) ? RealmSprites.prizeSvg(it.itemId) : null;
     const c = RealmSprites.critter(it.itemId);
     return c ? RealmSprites.critterSvg(c, 'idle') : null;
   }
   function title(it) {
     const c = it.kind === 'critter' ? RealmSprites.critter(it.itemId) : null;
+    if (it.kind === 'accessory') return { name: it.name, sub: SLOT_WORD[slotOf(it)] || 'accessory' };
     return c ? { name: c.name, sub: c.species } : { name: it.name.replace(/ unicorn$/i, ''), sub: 'unicorn style' };
   }
 
   function render(popId) {
     $('#tabCritters').setAttribute('aria-selected', String(tab === 'critter'));
     $('#tabUnicorns').setAttribute('aria-selected', String(tab === 'unicorn'));
+    $('#tabAcc').setAttribute('aria-selected', String(tab === 'accessory'));
+    renderWearing();
     const grid = $('#grid');
     grid.replaceChildren();
     items.filter(it => it.kind === tab && art(it)).forEach(it => {
       const mine = isMine(it), on = isEquipped(it), t = title(it);
-      const card = el('article', 'item card' + (mine ? ' mine' : '') + (on ? ' equipped' : '') + (it.itemId === popId ? ' pop' : ''));
+      const locked = it.kind === 'accessory' && !mine;
+      const card = el('article', 'item card' + (mine ? ' mine' : '') + (on ? ' equipped' : '') + (locked ? ' locked' : '') + (it.itemId === popId ? ' pop' : ''));
       card.dataset.kind = it.kind;
       card.dataset.id = it.itemId;
       const pic = el('div', 'art');
       pic.append(art(it));
       card.append(pic, el('h3', '', t.name), el('p', 'sp', t.sub));
       const price = el('div', 'price' + (mine ? ' mine' : ''));
-      if (mine) price.textContent = it.price === 0 ? 'Everyone has this one' : 'Yours!';
+      if (it.kind === 'accessory') { price.className = 'price mine'; price.textContent = mine ? 'Yours!' : 'Win it in the Critter Claw'; }
+      else if (mine) price.textContent = it.price === 0 ? 'Everyone has this one' : 'Yours!';
       else price.innerHTML = GEM + '<span>' + it.price.toLocaleString() + '</span>';
       card.append(price);
 
       const acts = el('div', 'acts');
-      if (!mine && asking === it.itemId) {
+      if (it.kind === 'accessory') {
+        const pet = equipped.avatar ? RealmSprites.critter(equipped.avatar) : null;
+        if (!mine) { const a = el('a', 'btn btn-soft', 'Try the claw machine'); a.href = 'claw.html'; acts.append(a); }
+        else if (on) { acts.append(el('div', 'badge', 'Wearing it')); acts.append(button('Take it off', 'btn-soft btn-small', () => equip(slotOf(it), ''))); }
+        else if (pet) acts.append(button('Put it on ' + pet.name, 'btn-soft', () => equip(slotOf(it), it.itemId)));
+        else acts.append(button('Pick an avatar first', 'btn-soft', () => {}, true));
+      } else if (!mine && asking === it.itemId) {
         acts.append(el('p', 'ask', 'Spend ' + it.price + ' ' + C.pointsName + '?'),
           button(it.kind === 'critter' ? 'Yes, adopt ' + t.name + '!' : 'Yes, get it!', '', () => buy(it)),
           button('Not now', 'btn-soft', () => { asking = null; render(); }));
@@ -123,13 +149,31 @@
     const c = itemId && slot === 'avatar' ? RealmSprites.critter(itemId) : null;
     note(slot === 'avatar'
       ? (c ? c.name + ' is your avatar now. Look for them on the map!' : 'No avatar for now.')
-      : 'Your unicorn will look like this in the next race.');
+      : slot === 'unicorn' ? 'Your unicorn will look like this in the next race.'
+      : itemId ? 'Looking good!' : 'Taken off.');
     RealmFX.correct();
     render();
   }
 
   $('#tabCritters').addEventListener('click', () => { tab = 'critter'; asking = null; render(); });
   $('#tabUnicorns').addEventListener('click', () => { tab = 'unicorn'; asking = null; render(); });
+  $('#tabAcc').addEventListener('click', () => { tab = 'accessory'; asking = null; render(); });
+
+  // On the Accessories tab: your avatar wearing everything it has on.
+  function renderWearing() {
+    const box = $('#wearing');
+    box.hidden = tab !== 'accessory';
+    if (box.hidden) return;
+    box.replaceChildren();
+    const pet = equipped.avatar ? RealmSprites.critter(equipped.avatar) : null;
+    if (!pet) { box.append(el('p', '', 'Pick an avatar on the Critters tab, and then dress it up with accessories from the Critter Claw!')); return; }
+    const outfit = {};
+    RealmSprites.SLOTS.forEach(sl => { if (equipped[sl]) outfit[sl] = equipped[sl]; });
+    box.append(RealmSprites.critterSvg(pet, 'idle', outfit));
+    const won = items.filter(i => i.kind === 'accessory' && owned.indexOf(i.itemId) >= 0).length;
+    const total = items.filter(i => i.kind === 'accessory').length;
+    box.append(el('p', '', pet.name + "'s outfit. You've won " + won + ' of ' + total + ' accessories.'));
+  }
 
   MathRealm.shop().then(d => {
     if (!d.ok) { note(MathRealm.errorMessage(d.error, true)); return; }
