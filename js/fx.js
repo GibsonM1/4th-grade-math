@@ -4,7 +4,7 @@
  *   RealmFX.correct()  RealmFX.wrong()  RealmFX.fanfare()  RealmFX.confetti()
  *   RealmFX.soundOn / RealmFX.toggleSound()        sound effects start OFF
  *   RealmMusic.on   / RealmMusic.toggle()          music starts ON (after the first click)
- *   RealmMusic.setTheme('race')                    pick the music for a page: 'calm' (default), 'race', 'shop' or 'arcade'
+ *   RealmMusic.setTheme('race')                    pick the music: 'calm' (default), 'race', 'shop', 'arcade' or 'party'
  *   RealmMusic.duck(true/false)                    softens the music for a suspenseful moment
  *   RealmFX.whirr(ms) clunk() grab() drumroll(ms) aww()   claw machine sounds
  *   RealmFX.gallop(ms)                             hoofbeats while a unicorn runs
@@ -194,6 +194,16 @@
       patterns: [[0, 2, 4, null, 3, null, 4, 2], [4, null, 3, 2, 1, null, 0, null], [0, 4, 3, 4, 2, 4, 1, 4], [2, null, 2, 4, null, 3, 1, null]],
       sparkle: [96, 98, 100, 103, 105],
     },
+    // bug❤️shack: an original retro beach-party tune. Surf-rock twang over a walking
+    // bass with hand claps on 2 and 4. Not based on any real song.
+    party: {
+      bpm: 128, restChance: 0.05, sparkleRate: 0.04, padVol: 0, arpVol: 0.05, bassVol: 0.1, drums: 'party',
+      arpType: 'sawtooth', arpOctave: 12, arpLen: 0.3, bassStyle: 'walk', bassType: 'triangle',
+      // A party-friendly I-vi-IV-V in G, then a bluesy turnaround
+      chords: [[55, 59, 62], [52, 55, 59], [60, 64, 67], [62, 66, 69], [55, 59, 62], [57, 60, 64], [62, 66, 69], [55, 59, 62]],
+      patterns: [[0, null, 1, 2, null, 2, 1, null], [2, 1, 0, null, 0, 1, 2, 4], [0, 2, 4, 2, 0, null, 1, null], [4, null, 3, null, 2, 1, 0, null]],
+      sparkle: [79, 83, 86, 88],
+    },
     // Claw machine: chiptune arcade loop.
     arcade: {
       bpm: 132, restChance: 0, sparkleRate: 0.05, padVol: 0, arpVol: 0.034, bassVol: 0.1, drums: 'arcade',
@@ -259,6 +269,18 @@
     osc.start(at);
     osc.stop(at + 0.3);
   }
+  function clap(a, at) {
+    for (let i = 0; i < 3; i++) {   // three quick bursts sound like several hands
+      const t = at + i * 0.012, src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = noiseBuffer(a);
+      bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 1.2;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(i === 2 ? 0.07 : 0.035, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (i === 2 ? 0.13 : 0.04));
+      src.connect(bp).connect(g).connect(bus.input);
+      src.start(t, Math.random() * 0.5, 0.15);
+    }
+  }
   function shaker(a, at, vol) {
     const src = a.createBufferSource(), hp = a.createBiquadFilter(), g = a.createGain();
     src.buffer = noiseBuffer(a);
@@ -287,6 +309,11 @@
     }
     if (T.bassStyle === 'oompah') {               // candy store: root on 1, chord tones on the off-beats
       if (beat % 2 === 0) voice(a, hz((beat % 4 === 0 ? chord[0] : chord[2]) - 24), at, 0.28, { type: 'triangle', vol: T.bassVol, attack: 0.005 });
+    } else if (T.bassStyle === 'walk') {       // root, fifth, octave, fifth under the twang
+      if (beat % 2 === 0) {
+        const steps = [0, 7, 12, 7];
+        voice(a, hz(chord[0] - 24 + steps[(beat / 2) % 4]), at, 0.3, { type: T.bassType || 'triangle', vol: T.bassVol, attack: 0.006 });
+      }
     } else if (T.bassStyle === 'bounce') {        // arcade: root and octave, every eighth
       voice(a, hz(chord[0] - (beat % 2 ? 12 : 24)), at, 0.14, { type: T.bassType || 'square', vol: T.bassVol * 0.5, attack: 0.004 });
     } else {
@@ -300,6 +327,10 @@
       else shaker(a, at, 0.008);
     } else if (T.drums === 'tick') {             // a little woodblock on 2 and 4
       if (beat === 2 || beat === 6) shaker(a, at, 0.02);
+    } else if (T.drums === 'party') {          // kick on 1 and 3, hand claps on 2 and 4
+      if (beat === 0 || beat === 4) kick(a, at);
+      if (beat === 2 || beat === 6) clap(a, at);
+      if (beat % 2 === 1) shaker(a, at, 0.012);
     } else if (T.drums === 'arcade') {
       if (beat === 0 || beat === 4) kick(a, at);
       if (beat === 2 || beat === 6) shaker(a, at, 0.035);

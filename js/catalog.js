@@ -26,6 +26,7 @@ window.MATH_REALM_CATALOG = {
       link: { label: 'See how it works', page: 'how-it-works.html' } },
     { zone: 'Decimals',         title: 'Unicorn Race.Track', blurb: 'Race your unicorn along a decimal number line, landing on tenths and hundredths.', accent: 'sky' },
     { zone: 'Fractions',        title: 'Critter Café',      blurb: 'Measure fractions of a cup and kilograms on the scale to feed hungry pets.', accent: 'sun' },
+    { zone: 'Measurement',      title: 'bug❤️shack',        blurb: 'Measure cute bugs on the tape in tenths and hundredths of a centimeter, then stack them up.', accent: 'mint' },
   ],
 
   // Which page plays each skill, matched by the start of the skillId.
@@ -35,5 +36,6 @@ window.MATH_REALM_CATALOG = {
     { prefix: 'g4.u6.', page: 'area-model.html', ready: true  },
     { prefix: 'g4.dec.', page: 'unicorn-race.html', ready: true },
     { prefix: 'g4.frac.', page: 'pet-food.html', ready: true },
+    { prefix: 'g4.bug.', page: 'bug-shack.html', ready: false },   // the bug❤️shack chat flips this to true
   ],
 };

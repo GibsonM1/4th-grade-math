@@ -2,7 +2,7 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.5.0 (higher shop prices that rise as a student's collection grows)
+ * Version 1.6.0 (adds the bug❤️shack measurement and decimal-addition skills)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -30,7 +30,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -97,6 +97,10 @@ const DEFAULT_SKILLS = [
   ['g4.frac.mixed',     'More than a cup (1 3/4 = 7/4)',                       'Fractions',  8, 0.8, '',   3, false],
   ['g4.frac.times',     'Feed a group (3 × 2/3 cup)',                          'Fractions',  8, 0.8, '',   3, true],
   ['g4.frac.kg',        'Kitchen scale: tenths and hundredths of a kilogram',  'Fractions',  8, 0.8, '',   3, false],
+  ['g4.bug.tenths',     'Measure bugs in tenths of a centimeter',              'Measurement', 8, 0.8, '',  3, false],
+  ['g4.bug.hundredths', 'Measure bugs in hundredths (every 10th mark labeled)', 'Measurement', 8, 0.8, '', 3, false],
+  ['g4.bug.stack',      'Stack two bugs: how tall together?',                  'Measurement', 8, 0.8, '',  3, true],
+  ['g4.bug.build',      'Pick bugs that stack to a target height',             'Measurement', 8, 0.8, '',  3, true],
 ];
 
 // itemId, name, kind (critter = a pet for the café and your avatar; unicorn = your race style), price in gems.
