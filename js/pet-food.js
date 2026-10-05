@@ -9,8 +9,11 @@
  *
  * What makes them think, not just tap the numerator:
  *   - Choosing the cup. Only cups that split a cup into the right parts work
- *     (3/4 takes the 1/4 or the 1/8 cup, never the 1/3). One cup size per meal,
- *     plus the 1 cup, so nobody adds unlike denominators (5th grade).
+ *     (3/4 takes the 1/4 or the 1/8 cup, never the 1/3). Cups that go together can
+ *     mix (1/3 + 1/3 + 1/6 = 2/6 + 2/6 + 1/6 = 5/6): the game rewrites them in the
+ *     smallest unit, which is 4.NF.1 + 4.NF.3, like tenths and hundredths in 4.NF.5.
+ *     Cups that don't go together (1/3 and 1/4) can't mix, since that's 5.NF.1.
+ *     The 1 cup goes with everything.
  *   - Cards in different forms: numbers, words ("three fourths"), or a shaded
  *     fraction bar.
  *   - Adding it up (4.NF.3): after scooping, the student types how much is in
@@ -233,7 +236,10 @@
     const W = list.filter(d => d === 1).length, f = list.filter(d => d !== 1);
     const parts = [];
     if (W) parts.push(W + (W > 1 ? ' whole cups' : ' whole cup'));
-    if (f.length) parts.push(f.length + (f.length > 1 ? ' scoops' : ' scoop') + ' of the 1/' + f[0] + ' cup');
+    f.filter((d, i) => f.indexOf(d) === i).forEach(d => {
+      const n = f.filter(x => x === d).length;
+      parts.push(n + (n > 1 ? ' scoops' : ' scoop') + ' of the 1/' + d + ' cup');
+    });
     return parts.join(' and ') || 'nothing';
   }
 
@@ -507,7 +513,7 @@
     if (L.kind === 'kg') {
       p('<strong>Each pet shows a meal card</strong> in kilograms (kg). Put 1 kg bags, 0.1 kg scoops and 0.01 kg pinches on the scale until it has exactly the right amount, then press <strong>Serve!</strong>');
     } else {
-      p('<strong>Each pet shows a meal card.</strong> Pick a measuring cup that fits the amount, scoop into the bowl, then press <strong>Serve!</strong> One cup size per meal' +
+      p('<strong>Each pet shows a meal card.</strong> Pick a measuring cup that fits the amount, scoop into the bowl, then press <strong>Serve!</strong> You can mix cups that go together, like 1/3 and 1/6' +
         (L.whole ? ' (the 1 cup can join any of them).' : '.'));
       p('<strong>Then add it up:</strong> type how much is in the bowl. Your first shift shows the sums for you.');
     }
@@ -749,13 +755,17 @@
     added.forEach(a => { c[a]++; });
     return c;
   }
-  const chosenCup = () => added.find(d => d !== 1) || 0;
-  // The denominator the bowl is measured in right now
+  const fracCups = () => added.filter(d => d !== 1);
+  const usedCups = () => fracCups().filter((d, i, a) => a.indexOf(d) === i);
+  // The unit the bowl is measured in: the smallest piece in it. Only cups that go together
+  // can mix, so every cup in the bowl fits evenly into this unit (1/3 = 2/6).
   function bowlDen() {
-    const c = chosenCup(), p = meal.prefillDen;
-    if (c && p) return Math.max(c, p);
-    return c || p || meal.cardDen;
+    const ds = usedCups();
+    if (meal.prefillDen) ds.push(meal.prefillDen);
+    return ds.length ? Math.max.apply(null, ds) : meal.cardDen;
   }
+  // More than one size of piece in the bowl? Then the math gets rewritten in one unit.
+  const mixedUnits = () => { const ds = usedCups(); if (meal.prefillDen) ds.push(meal.prefillDen); return ds.some(d => d !== bowlDen()); };
 
   /* ── The bowl: one clear jar per cup ── */
 
@@ -806,7 +816,7 @@
   // Lines for equal parts appear once a cup is chosen (or food is already in the bowl)
   let tickDen = -1;
   function drawTicks() {
-    const d = chosenCup() || meal.prefillDen || 0;
+    const d = usedCups().length || meal.prefillDen ? bowlDen() : 0;
     if (d === tickDen) return;
     tickDen = d;
     jarRefs.forEach(jr => {
@@ -949,7 +959,7 @@
     const shelf = $('#shelf');
     shelf.replaceChildren();
     shelf.classList.toggle('kg', L.kind === 'kg');
-    $('#shelfTitle').textContent = L.kind === 'kg' ? 'Weights' : (meal.whole ? 'Measuring cups: one fraction size per meal' : 'Measuring cups: one size per meal');
+    $('#shelfTitle').textContent = L.kind === 'kg' ? 'Weights' : 'Measuring cups: mix the ones that go together';
     shelfItems = L.kind === 'kg'
       ? [{ key: 'bag', amt: '1 kg', sub: '1 kg bag' }, { key: 'scoop', amt: '0.1 kg', sub: '1/10 kg scoop' }, { key: 'pinch', amt: '0.01 kg', sub: '1/100 kg pinch' }]
       : (meal.whole ? [1] : []).concat(meal.cups).map(d => ({ key: d, amt: d === 1 ? '1' : '1/' + d, sub: 'cup' }));
@@ -973,24 +983,34 @@
     if (key === meal.gone) return 'gone';
     if (phaseName !== 'scoop') return 'off';
     if (key === 1) return 'ok';
-    const c = chosenCup();
-    if (c && c !== key) return 'locked';
-    if (meal.prefillDen && !sameFamily(key, meal.prefillDen)) return 'locked';
-    return 'ok';
+    return clashWith(key) ? 'locked' : 'ok';
+  }
+  // A cup already in the bowl that this cup doesn't go together with (thirds and fourths), if any
+  function clashWith(key) {
+    const ds = usedCups();
+    if (meal.prefillDen) ds.push(meal.prefillDen);
+    return ds.find(d => !sameFamily(key, d)) || 0;
   }
   function paintShelf() {
     $('#shelf').classList.toggle('off', phaseName !== 'scoop');
     shelfItems.forEach(it => {
       const st = cupState(it.key);
-      it.btn.disabled = st !== 'ok';
+      it.btn.disabled = st !== 'ok' && st !== 'locked';    // a locked cup still explains itself when tapped
       it.btn.classList.toggle('locked', st === 'locked');
       it.btn.classList.toggle('full', st === 'full');
       it.btn.classList.toggle('gone', st === 'gone');
-      it.btn.classList.toggle('chosen', L.kind !== 'kg' && it.key !== 1 && it.key === chosenCup());
+      it.btn.classList.toggle('chosen', L.kind !== 'kg' && it.key !== 1 && usedCups().indexOf(it.key) >= 0);
     });
   }
 
   function addScoop(key, btn) {
+    if (phaseName === 'scoop' && cupState(key) === 'locked') {
+      const c = clashWith(key);
+      const already = usedCups().indexOf(c) >= 0 ? 'the 1/' + c + ' scoops' : 'the food already in the bowl';
+      tip('The 1/' + key + ' cup and the 1/' + c + ' cup don\'t go together: ' + DEN_WORD[c][1] + ' can\'t be written as ' + DEN_WORD[key][1] + '.' +
+        (usedCups().indexOf(c) >= 0 ? ' Pour back ' + already + ' to use it.' : ''));
+      return;
+    }
     if (phaseName !== 'scoop' || cupState(key) !== 'ok') return;
     if (L.kind !== 'kg' && total() + U / key > capacity()) {
       tip("That scoop won't fit in the bowl. Pour one back, or use a smaller cup.");
@@ -999,8 +1019,13 @@
     }
     added.push(key);
     if (btn) { btn.classList.remove('pouring'); void btn.offsetWidth; btn.classList.add('pouring'); }
-    if (L.kind !== 'kg' && key !== 1 && added.filter(d => d !== 1).length === 1) {
-      tip('You picked the 1/' + key + ' cup. To switch cups, pour all of its scoops back.');
+    if (L.kind !== 'kg' && key !== 1) {
+      const sizes = usedCups();
+      if (fracCups().length === 1) tip('Cups that go together can mix: 1/2, 1/4 and 1/8, or 1/3 and 1/6 (1/2 goes with 1/6 too).');
+      else if (sizes.length > 1 && fracCups().filter(d => d === key).length === 1) {
+        const D = bowlDen();
+        tip('Mixing cups! ' + sizes.filter(d => d !== D).map(d => 'Each 1/' + d + ' scoop is ' + (D / d) + '/' + D + '.').join(' '));
+      }
     }
     refresh();
   }
@@ -1023,8 +1048,24 @@
     const push = t => { if (tok.length) tok.push('+'); tok.push(t); };
     if (wholes > 3) push(wholes + ' × 1');
     else for (let w = 0; w < wholes; w++) push('1');
-    if (units.length > 5) push(units.length + ' × 1/' + units[0]);
-    else units.forEach(d => push('1/' + d));
+    const groups = [];
+    units.forEach(d => { let g = groups.find(x => x.d === d); if (!g) groups.push(g = { d, n: 0 }); g.n++; });
+    groups.forEach(g => {
+      if (units.length > 5 && g.n > 2) push(g.n + ' × 1/' + g.d);
+      else for (let i = 0; i < g.n; i++) push('1/' + g.d);
+    });
+    return tok;
+  }
+  // The same bowl written in one unit: 1/3 + 1/3 + 1/6 → 2/6 + 2/6 + 1/6
+  function unitTokens() {
+    const D = bowlDen(), tok = [];
+    const push = t => { if (tok.length) tok.push('+'); tok.push(t); };
+    const wholes = added.filter(d => d === 1).length;
+    if (wholes > 3) push(wholes + ' × 1'); else for (let w = 0; w < wholes; w++) push('1');
+    if (meal.prefill) push(Math.round(meal.prefill * D / U) + '/' + D);
+    const tops = fracCups().map(d => D / d);
+    if (tops.length > 6) push(tops.reduce((a, b) => a + b, 0) + '/' + D);
+    else tops.forEach(k => push(k + '/' + D));
     return tok;
   }
   function refresh() {
@@ -1035,6 +1076,7 @@
       eq.append(mathLine([{ text: L.kind === 'kg' ? 'The scale is empty.' : 'The bowl is empty.', cls: 'word' }]));
     } else {
       eq.append(mathLine(scoopTokens().concat(L.kind === 'kg' ? [] : ['='].concat(meal.showSum ? sumTokens(total()) : ['?']))));
+      if (L.kind === 'cups' && meal.showSum && mixedUnits()) eq.append(mathLine(unitTokens().concat(['='], sumTokens(total())), 'small'));
     }
     if (L.kind === 'kg') drawPile(); else { drawTicks(); setFill(false); }
     paintShelf();
@@ -1118,8 +1160,9 @@
       parts.forEach((p, i) => { if (i) tok.push('+'); tok.push({ text: p, cls: 'word' }); });
       eq.append(mathLine(tok.concat(['=', kgText(t), { text: 'kg', cls: 'word' }])));
       const fr = [kgText(t), { text: 'kg', cls: 'word' }, '=', kgFrac(t), { text: 'kg', cls: 'word' }];
-      if (meal.form === 'sum') fr.push('=', Math.floor(meal.target / 10) + '/10', '+', (meal.target % 10) + '/100');
-      if (t % 10 === 0 && t < 100) fr.push('=', t + '/100');
+      const kg = () => ({ text: 'kg', cls: 'word' });
+      if (meal.form === 'sum') fr.push('=', Math.floor(meal.target / 10) + '/10', kg(), '+', (meal.target % 10) + '/100', kg());
+      if (t % 10 === 0 && t < 100) fr.push('=', t + '/100', kg());
       eq.append(mathLine(fr, 'small'));
       return;
     }
@@ -1128,6 +1171,7 @@
     if (t > U && t % U) tok.push('=', improper(t, D));
     if (t === meal.target && !meal.times && meal.cardDen !== D) tok.push('=', meal.amt);
     eq.append(mathLine(tok));
+    if (mixedUnits()) eq.append(mathLine(unitTokens().concat(['=', cupText(t, D, true)]), 'small'));
     if (meal.times && t === meal.target) {
       const ln = [meal.times, '=', improper(t, meal.cardDen)];
       if (t % U === 0 || t > U) ln.push('=', cupText(t, meal.cardDen));
@@ -1198,22 +1242,30 @@
   }
   function sumHint() {
     sumHinted = true; hinted = true;
-    const c = chosenCup();
-    caption('Add the top numbers. The bottom number stays the same, because ' + (c ? 'every scoop is 1/' + c + ' cup' : 'the parts are all the same size') + '.' +
-      (added.some(d => d === 1) ? ' Each 1 cup scoop is one whole cup.' : ''));
+    const sizes = usedCups(), D = bowlDen();
+    let h;
+    if (mixedUnits()) {
+      h = 'Your scoops are different sizes, so write them all in ' + DEN_WORD[D][1] + ' first: ' +
+        sizes.concat(meal.prefillDen ? [meal.prefillDen] : []).filter((d, i, a) => d !== D && a.indexOf(d) === i).map(d => '1/' + d + ' = ' + (D / d) + '/' + D).join(', ') +
+        '. Then add the top numbers. The bottom number stays ' + D + '.';
+    } else {
+      h = 'Add the top numbers. The bottom number stays the same, because ' + (sizes.length ? 'every scoop is 1/' + sizes[0] + ' cup' : 'the parts are all the same size') + '.';
+    }
+    caption(h + (added.some(d => d === 1) ? ' Each 1 cup scoop is one whole cup.' : ''));
     askSum(true);
   }
 
   // How the bowl adds up, in words a 4th grader can follow
   function sumExplain() {
-    const t = total(), D = bowlDen(), c = chosenCup();
+    const t = total(), D = bowlDen();
     const wholes = added.filter(d => d === 1).length;
     const tops = [];
     if (meal.prefill) tops.push(Math.round(meal.prefill * D / U));
     added.filter(d => d !== 1).forEach(d => tops.push(D / d));
     const n = tops.reduce((a, b) => a + b, 0);
     let s = '';
-    if (c && c !== D) s += 'Each 1/' + c + ' scoop is ' + (D / c) + '/' + D + '. ';
+    usedCups().filter(c => c !== D).forEach(c => { s += 'Each 1/' + c + ' scoop is ' + (D / c) + '/' + D + '. '; });
+    if (meal.prefill && meal.prefillDen !== D) s += 'The ' + cupText(meal.prefill, meal.prefillDen) + ' cup already in the bowl is ' + Math.round(meal.prefill * D / U) + '/' + D + '. ';
     if (tops.length === 1) {
       s += 'The fraction part is ' + tops[0] + '/' + D + '. ';
     } else if (tops.length) {
@@ -1230,6 +1282,9 @@
     const D = bowlDen(), terms = added.filter(x => x !== 1).length + (meal.prefill ? 1 : 0);
     if (d && d !== D && terms > 1 && (d === D * terms || d === added.filter(x => x !== 1).reduce((a, x) => a + x, 0) + (meal.prefillDen || 0))) {
       return "Watch out: don't add the bottom numbers! When you add " + DEN_WORD[D][1] + ', the parts are still ' + DEN_WORD[D][1] + '. ';
+    }
+    if (mixedUnits() && n === fracCups().length + (meal.prefill ? 1 : 0)) {
+      return 'Your scoops are different sizes, so you can\'t just count them. Write them all in ' + DEN_WORD[D][1] + ' first. ';
     }
     if (d === D) return 'Count the scoops again. ';
     return '';
