@@ -24,7 +24,7 @@ window.MATH_REALM_CATALOG = {
       link: { label: 'Speed challenge', page: 'challenge.html' } },
     { zone: 'Unit 6',           title: 'Rectangle Kingdom', blurb: 'Build big multiplication problems out of rectangles.',        accent: 'berry',
       link: { label: 'See how it works', page: 'how-it-works.html' } },
-    { zone: 'Decimals',         title: 'Unicorn Racetrack', blurb: 'Race your unicorn along the number line with tenths and hundredths.', accent: 'sky' },
+    { zone: 'Decimals',         title: 'Unicorn Race.Track', blurb: 'Race your unicorn along a decimal number line, landing on tenths and hundredths.', accent: 'sky' },
     { zone: 'Fractions',        title: 'Critter Café',      blurb: 'Measure fractions of a cup and kilograms on the scale to feed hungry pets.', accent: 'sun' },
   ],
 

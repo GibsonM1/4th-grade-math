@@ -21,6 +21,9 @@
   .guest-row { margin-top: 18px; padding-top: 16px; border-top: 2px dashed var(--card-edge); text-align: center; }
   .guest-row p { margin: 0 0 10px; color: var(--ink-soft); font-weight: 600; }
   .guest-row .btn { width: 100%; }
+  /* light grey, so it reads clearly against the white card without competing with "Let's go!" */
+  .btn-guest { color: var(--ink); background: #E7E2F0; box-shadow: 0 5px 0 #C9C1DC; }
+  .btn-guest:active { box-shadow: 0 1px 0 #C9C1DC; }
   .guest-row .small { margin: 10px 0 0; font-weight: 400; font-size: .88rem; }
 
   /* ── Home ── */
@@ -107,8 +110,7 @@
         <button class="btn btn-big" type="submit" id="loginBtn">Let's go!</button>
       </form>
       <div class="guest-row">
-        <p>Just looking?</p>
-        <button class="btn btn-soft" type="button" id="guestBtn">Play as a guest</button>
+        <button class="btn btn-guest" type="button" id="guestBtn">Play as a guest</button>
         <p class="small">Try every game without a login. Nothing is saved, so no gems, stars or prizes.</p>
       </div>
     </section>
