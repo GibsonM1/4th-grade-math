@@ -2,7 +2,7 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.6.0 (adds the bug❤️shack measurement and decimal-addition skills)
+ * Version 1.7.0 (adds Import students from a directory sheet)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -30,7 +30,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -807,6 +807,8 @@ function onOpen() {
     .addItem('Fill in missing PINs', 'generatePins')
     .addItem('Apply Settings and Skills changes now', 'reloadConfig')
     .addItem('Reset shop prices to the built-in ones', 'resetShopPrices')
+    .addSeparator()
+    .addItem('Import students from a directory sheet…', 'importStudents')
     .addToUi();
 }
 
@@ -883,6 +885,135 @@ function resetShopPrices() {
 function reloadConfig() {
   CacheService.getScriptCache().removeAll(['cfg_settings', 'cfg_skills']);
   SpreadsheetApp.getActive().toast('Settings and Skills changes are live.', 'Math Realm', 5);
+}
+
+/* ───────────── Importing students ─────────────
+ * Reads one tab of a parent-directory spreadsheet and adds those students to the Roster.
+ * It asks for the directory link the first time and remembers it in Script Properties,
+ * so pasting a new Code.gs never wipes it. Safe to run again: students already on the
+ * Roster for that class code are skipped, so only new ones are added.
+ *
+ * In the directory tab it looks for columns whose headers mention first name, last name
+ * and phone. If there are no such headers it falls back to A = first, B = last, D = phone.
+ */
+function importStudents() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+
+  let url = props.getProperty('directoryUrl') || '';
+  const askUrl = ui.prompt('Import students (1 of 3)',
+    'Paste the link to the parent directory spreadsheet.' + (url ? '\n\nLeave blank to use the one you used last time.' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (askUrl.getSelectedButton() !== ui.Button.OK) return;
+  const typed = askUrl.getResponseText().trim();
+  if (typed) url = typed;
+  if (!url) { ui.alert('No link given, so nothing was imported.'); return; }
+
+  let source;
+  try {
+    source = SpreadsheetApp.openByUrl(url);
+  } catch (err) {
+    ui.alert("Could not open that spreadsheet.\n\nCheck the link, and make sure your account can open it.\n\n" + err);
+    return;
+  }
+  props.setProperty('directoryUrl', url);
+
+  const names = source.getSheets().map(sh => sh.getName());
+  const askTab = ui.prompt('Import students (2 of 3)',
+    'Which tab of "' + source.getName() + '" holds the students?\n\n' + names.join('\n'),
+    ui.ButtonSet.OK_CANCEL);
+  if (askTab.getSelectedButton() !== ui.Button.OK) return;
+  const tabName = askTab.getResponseText().trim();
+  const sheet = source.getSheetByName(tabName);
+  if (!sheet) { ui.alert('There is no tab called "' + tabName + '" in that spreadsheet.'); return; }
+
+  const askCode = ui.prompt('Import students (3 of 3)',
+    'What class code should these students use to log in?\n\nShort and easy to type, like 305.',
+    ui.ButtonSet.OK_CANCEL);
+  if (askCode.getSelectedButton() !== ui.Button.OK) return;
+  const classCode = askCode.getResponseText().trim().toUpperCase();
+  if (!classCode) { ui.alert('A class code is needed, so nothing was imported.'); return; }
+
+  const last = sheet.getLastRow(), wide = Math.max(4, sheet.getLastColumn());
+  if (last < 2) { ui.alert('That tab has no rows under its header.'); return; }
+  const values = sheet.getRange(1, 1, last, wide).getValues();
+  const head = values[0].map(h => String(h).toLowerCase());
+  const findCol = (words, fallback) => {
+    for (let i = 0; i < head.length; i++) {
+      for (let w = 0; w < words.length; w++) if (head[i].indexOf(words[w]) >= 0) return i;
+    }
+    return fallback;
+  };
+  const cFirst = findCol(['first name', 'first', 'student first'], 0);
+  const cLast = findCol(['last name', 'last', 'surname'], 1);
+  const cPhone = findCol(['phone', 'mobile', 'cell', 'contact number'], 3);
+
+  // Who is already on the Roster for this class code?
+  const rt = table_(TABS.roster);
+  const taken = {};
+  rt.rows.forEach(r => {
+    const id = String(r.studentId).trim();
+    if (id && String(r.classCode).trim().toUpperCase() === classCode) taken[id.toLowerCase()] = true;
+  });
+
+  const add = [], skipped = [], noPin = [];
+  for (let i = 1; i < values.length; i++) {
+    const first = String(values[i][cFirst] || '').trim();
+    const lastName = String(values[i][cLast] || '').trim();
+    if (!first) continue;
+
+    // A login ID that is easy for a 9-year-old to type and unique inside the class:
+    // first name plus last initial, letters and digits only (Maria Garcia → MariaG).
+    const base = (first + lastName.charAt(0)).replace(/[^A-Za-z0-9]/g, '') || 'Student';
+    let id = base, n = 2;
+    while (taken[id.toLowerCase()]) { id = base + n; n++; }
+
+    const already = rt.rows.some(r => String(r.classCode).trim().toUpperCase() === classCode &&
+      String(r.studentName).trim().toLowerCase() === (first + ' ' + lastName.charAt(0)).trim().toLowerCase());
+    if (already) { skipped.push(first + ' ' + lastName.charAt(0)); continue; }
+    taken[id.toLowerCase()] = true;
+
+    // PIN: the last 4 digits of the phone number. No usable number means a random PIN,
+    // because a blank PIN would let anyone log in as that student.
+    const digits = String(values[i][cPhone] == null ? '' : values[i][cPhone]).replace(/[^0-9]/g, '');
+    let pin = digits.length >= 4 ? digits.slice(-4) : '';
+    if (!pin) { pin = String(1000 + Math.floor(Math.random() * 9000)); noPin.push(first + ' ' + lastName.charAt(0)); }
+
+    add.push({
+      studentId: id,
+      studentName: (first + ' ' + lastName.charAt(0)).trim(),
+      displayName: first,
+      classCode: classCode,
+      pin: pin,
+      disabled: false, points: 0, lifetimePoints: 0, lastLogin: '',
+    });
+  }
+
+  if (!add.length) {
+    ui.alert('Nothing new to add.\n\n' + skipped.length + ' student(s) on that tab are already on the Roster for class code ' + classCode + '.');
+    return;
+  }
+  const ok = ui.alert('Add ' + add.length + ' student(s)?',
+    'From "' + tabName + '" into class code ' + classCode + '.\n\n' +
+    'Reading: first name = column ' + colLetter_(cFirst) + ', last name = ' + colLetter_(cLast) + ', phone = ' + colLetter_(cPhone) + '.\n' +
+    'First few: ' + add.slice(0, 3).map(r => r.studentId + ' (' + r.studentName + ')').join(', ') + '\n\n' +
+    (skipped.length ? skipped.length + ' already on the Roster will be skipped.\n' : '') +
+    (noPin.length ? noPin.length + ' had no phone number and will get a random PIN.' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (ok !== ui.Button.OK) return;
+
+  appendRows_(TABS.roster, add);   // finds the real last row, so checkboxes don't push rows to the bottom
+  CacheService.getScriptCache().removeAll(['cfg_settings', 'cfg_skills']);
+  ui.alert('Added ' + add.length + ' student(s) to class code ' + classCode + '.' +
+    (skipped.length ? '\nSkipped ' + skipped.length + ' already on the Roster.' : '') +
+    (noPin.length ? '\n\nThese had no phone number and got a random PIN, so check their row:\n' + noPin.join(', ') : '') +
+    '\n\nStudents log in with the class code, their student ID and their PIN.');
+}
+
+function colLetter_(i) {
+  let s = '';
+  for (i += 1; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s;
+  return s;
 }
 
 function ensureTab_(ss, tab) {
