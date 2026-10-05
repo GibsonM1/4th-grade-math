@@ -18,6 +18,7 @@
   .login .tagline { margin: -10px 0 0; color: var(--haze); font-size: 1.1rem; text-align: center; }
   .login-card { width: min(420px, 100%); padding: 28px 26px 26px; }
   .login-card h2 { font-size: 1.5rem; margin-bottom: 18px; color: var(--violet); }
+  .field-hint { margin: -10px 0 16px; color: var(--ink-soft); font-size: .85rem; }
   .guest-row { margin-top: 18px; padding-top: 16px; border-top: 2px dashed var(--card-edge); text-align: center; }
   .guest-row p { margin: 0 0 10px; color: var(--ink-soft); font-weight: 600; }
   .guest-row .btn { width: 100%; }
@@ -104,7 +105,8 @@
       <h2 id="loginTitle">Who's playing?</h2>
       <form id="loginForm" autocomplete="off" novalidate>
         <label class="field"><span>Class code</span><input name="classCode" autocapitalize="characters" spellcheck="false" required></label>
-        <label class="field"><span>Student ID</span><input name="studentId" spellcheck="false" required></label>
+        <label class="field"><span>Your name</span><input name="studentId" spellcheck="false" autocomplete="off" required placeholder="Maria G." aria-describedby="nameHint"></label>
+        <p class="field-hint" id="nameHint">The name on your card. Capital letters and dots don't matter.</p>
         <label class="field"><span>PIN</span><input name="pin" type="password" inputmode="numeric"></label>
         <p class="form-error" id="loginError" role="alert" hidden></p>
         <button class="btn btn-big" type="submit" id="loginBtn">Let's go!</button>

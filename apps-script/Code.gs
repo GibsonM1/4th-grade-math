@@ -2,7 +2,7 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.7.0 (adds Import students from a directory sheet)
+ * Version 1.8.0 (name-based logins: IDs like "Maria G.", typed any way the student likes)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -30,7 +30,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -209,7 +209,10 @@ function login_(req) {
   }
 
   const t = table_(TABS.roster);
-  const i = t.rows.findIndex(r => sameId_(r.studentId, studentId) && String(r.classCode).trim().toUpperCase() === classCode);
+  // Student IDs are names like "Maria G.", so match loosely: capitals, spaces and
+  // punctuation are ignored. "Maria G.", "maria g" and "MariaG" are all the same login.
+  const want = idKey_(studentId);
+  const i = want ? t.rows.findIndex(r => idKey_(r.studentId) === want && String(r.classCode).trim().toUpperCase() === classCode) : -1;
   const row = i >= 0 ? t.rows[i] : null;
   const storedPin = row ? String(row.pin).trim() : '';
   if (!row || (storedPin && storedPin !== pin)) {
@@ -764,6 +767,8 @@ function rosterIndex_(t, who) {
 }
 
 function clean_(v, max) { return String(v == null ? '' : v).trim().slice(0, max || 60); }
+// For comparing student IDs typed by a 9-year-old: letters and digits only, lowercase.
+function idKey_(v) { return String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 function idSafe_(v, max) { return clean_(v, max).replace(/[^A-Za-z0-9._-]/g, ''); }
 // A leading apostrophe stops Sheets from treating typed text like "=..." as a formula.
 function safeText_(s) { return /^[=+@]/.test(s) ? "'" + s : s; }
@@ -953,7 +958,7 @@ function importStudents() {
   const taken = {};
   rt.rows.forEach(r => {
     const id = String(r.studentId).trim();
-    if (id && String(r.classCode).trim().toUpperCase() === classCode) taken[id.toLowerCase()] = true;
+    if (id && String(r.classCode).trim().toUpperCase() === classCode) taken[idKey_(id)] = true;
   });
 
   const add = [], skipped = [], noPin = [];
@@ -962,27 +967,32 @@ function importStudents() {
     const lastName = String(values[i][cLast] || '').trim();
     if (!first) continue;
 
-    // A login ID that is easy for a 9-year-old to type and unique inside the class:
-    // first name plus last initial, letters and digits only (Maria Garcia → MariaG).
-    const base = (first + lastName.charAt(0)).replace(/[^A-Za-z0-9]/g, '') || 'Student';
-    let id = base, n = 2;
-    while (taken[id.toLowerCase()]) { id = base + n; n++; }
+    // A login ID that looks like a name and is easy to type: "Maria G.". Logins ignore
+    // capitals, spaces and periods, so "maria g" works too. If two students in the class
+    // would end up the same, use more of the last name: "Maria Ga." then "Maria Gar.".
+    const fullName = (first + ' ' + lastName).trim();
+    let id = '';
+    for (let take = 1; take <= Math.max(1, lastName.length); take++) {
+      id = (first + ' ' + lastName.slice(0, take) + (take < lastName.length ? '.' : '')).trim();
+      if (!taken[idKey_(id)]) break;
+    }
+    if (taken[idKey_(id)]) { let n = 2; while (taken[idKey_(id + n)]) n++; id = id + n; }
 
     const already = rt.rows.some(r => String(r.classCode).trim().toUpperCase() === classCode &&
-      String(r.studentName).trim().toLowerCase() === (first + ' ' + lastName.charAt(0)).trim().toLowerCase());
-    if (already) { skipped.push(first + ' ' + lastName.charAt(0)); continue; }
-    taken[id.toLowerCase()] = true;
+      String(r.studentName).trim().toLowerCase() === fullName.toLowerCase());
+    if (already) { skipped.push(fullName); continue; }
+    taken[idKey_(id)] = true;
 
     // PIN: the last 4 digits of the phone number. No usable number means a random PIN,
     // because a blank PIN would let anyone log in as that student.
     const digits = String(values[i][cPhone] == null ? '' : values[i][cPhone]).replace(/[^0-9]/g, '');
     let pin = digits.length >= 4 ? digits.slice(-4) : '';
-    if (!pin) { pin = String(1000 + Math.floor(Math.random() * 9000)); noPin.push(first + ' ' + lastName.charAt(0)); }
+    if (!pin) { pin = String(1000 + Math.floor(Math.random() * 9000)); noPin.push(fullName); }
 
     add.push({
       studentId: id,
-      studentName: (first + ' ' + lastName.charAt(0)).trim(),
-      displayName: first,
+      studentName: fullName,      // teacher-only: shown on golden tickets so you know whose it is
+      displayName: first,         // what the games call them
       classCode: classCode,
       pin: pin,
       disabled: false, points: 0, lifetimePoints: 0, lastLogin: '',
@@ -1007,7 +1017,8 @@ function importStudents() {
   ui.alert('Added ' + add.length + ' student(s) to class code ' + classCode + '.' +
     (skipped.length ? '\nSkipped ' + skipped.length + ' already on the Roster.' : '') +
     (noPin.length ? '\n\nThese had no phone number and got a random PIN, so check their row:\n' + noPin.join(', ') : '') +
-    '\n\nStudents log in with the class code, their student ID and their PIN.');
+    '\n\nStudents log in with the class code, the name in the studentId column and their PIN. ' +
+    'Capitals, spaces and periods do not matter, so "Maria G.", "maria g" and "MariaG" all work.');
 }
 
 function colLetter_(i) {
