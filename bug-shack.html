@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bug❤️shack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@600;800&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/realm.css">
+<style>
+  .game { max-width: 1200px; margin: 0 auto; padding: 14px 18px 14px; }
+  .topbar { margin-bottom: 12px; }
+
+  /* Start, results and "not here" cards */
+  .screen-card { max-width: 760px; margin: 14px auto 0; padding: 26px 30px; }
+  .screen-card h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); color: var(--violet); margin: 2px 0 12px; }
+  .zone-name { margin: 0; font: 800 1.3rem/1.2 var(--display); color: var(--mint-deep); }
+  .hosts { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 26px; margin: 4px 0 6px; }
+  .host { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); }
+  .host svg { width: 70px; height: 76px; overflow: visible; }
+  .rules { margin: 16px 0 18px; padding: 16px 18px; border-radius: var(--radius-md); background: #EAFBF4; }
+  .rules p { margin: 0 0 9px; color: var(--ink); }
+  .rules p:last-child { margin-bottom: 0; }
+  .screen-card .stars .star { width: 34px; height: 34px; }
+  .book { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 52px; margin: 0 0 18px; color: var(--ink-soft); font-weight: 600; }
+  .book .mini { width: 34px; height: 44px; }
+  .book .label { margin-right: 8px; }
+  .intro-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .intro-actions .btn-big { flex: 1 1 260px; width: auto; }
+
+  /* The play board: the shack scene on the left, the work on the right */
+  .board { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; padding: 14px 16px 16px; }
+  .stage-wrap { position: relative; border-radius: var(--radius-md); overflow: hidden; background: #E3F7EF; }
+  #stage { display: block; height: min(560px, calc(100vh - 128px)); min-height: 380px; width: auto; aspect-ratio: 600 / 560; }
+  .work { display: flex; flex-direction: column; min-width: 0; }
+  @media (max-width: 920px) {
+    .board { grid-template-columns: 1fr; }
+    #stage { width: 100%; height: auto; min-height: 0; }
+  }
+
+  /* The guests so far, dancing in their spots */
+  .party { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; min-height: 44px; }
+  .party .count { margin-right: 4px; font: 800 1.15rem/1.1 var(--display); color: var(--ink); white-space: nowrap; }
+  .slots { display: flex; flex-wrap: wrap; gap: 5px; }
+  .slot { position: relative; width: 36px; height: 42px; border-radius: 12px; background: #F3EEFF; box-shadow: inset 0 0 0 2px #E2D8F7; }
+  .slot.now { box-shadow: inset 0 0 0 3px var(--violet); background: #fff; }
+  .slot.first { background: #E3F8F0; box-shadow: inset 0 0 0 2px var(--mint); }
+  .slot.helped { background: #FFF6D6; box-shadow: inset 0 0 0 2px var(--lemon); }
+  .slot.missed { background: #FFEAF3; box-shadow: inset 0 0 0 2px var(--bubblegum); }
+  .slot svg { position: absolute; left: 3px; top: 3px; width: 30px; height: 36px; overflow: visible; }
+  .slot.first svg, .slot.helped svg { animation: boogie .47s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+  .slot:nth-child(even) svg { animation-delay: -.23s; }
+  @keyframes boogie { from { transform: rotate(-7deg); } to { transform: rotate(7deg) translateY(-2px); } }
+
+  .caption { min-height: 5.65em; margin: 0 0 10px; padding: 11px 15px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-size: 1.12rem; line-height: 1.45; max-width: none; }
+  .caption.good { background: #E3F8F0; }
+  .caption.bad { background: #FFE9F2; }
+  .caption.boomer { background: #E5F2FF; }
+  .caption strong { font-weight: 600; }
+
+  /* The math area keeps one height, so nothing below it jumps around */
+  .workarea { min-height: 236px; padding: 8px 12px; border-radius: var(--radius-md); background: #F8F5FF; color: var(--ink); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 9px; min-height: 50px; }
+  .controls .btn { min-width: 8.5em; }
+  .tip { min-height: 1.4em; margin: 4px 0 0; font-size: .9rem; color: var(--ink-soft); max-width: none; }
+
+  /* Place-value answer boxes: O . t h */
+  .say { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; margin: 6px 0 4px; font: 600 1.25rem/1.2 var(--body); }
+  .dbox { --cell: 1.25em; position: relative; display: inline-grid; align-items: end; row-gap: 2px; font: 800 2.5rem/1.1 var(--display); color: var(--ink); }
+  .dbox .head { text-align: center; font: 600 .85rem/1 var(--body); color: var(--violet); }
+  .dbox .cell { height: 1.3em; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 3px var(--card-edge); }
+  .dbox .pt { text-align: center; align-self: end; padding-bottom: .05em; }
+  .dbox .cell.next { background: #FFF1B8; box-shadow: inset 0 0 0 3px var(--gold); }
+  .dbox .cell.ghost { color: #C9BBE8; }
+  .dbox input { position: absolute; left: 0; right: 0; bottom: 0; height: 1.3em; width: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: text; font-size: 16px; }
+  .dbox:focus-within .cell { box-shadow: inset 0 0 0 3px var(--violet); }
+  .dbox:focus-within .cell.next { box-shadow: inset 0 0 0 3px var(--gold), 0 0 0 4px var(--lemon); }
+  .dbox.ok .cell { background: #E3F8F0; box-shadow: inset 0 0 0 3px var(--mint); color: var(--mint-deep); }
+  .dbox.shown .cell { background: #FFF0F6; box-shadow: inset 0 0 0 3px var(--bubblegum); color: var(--berry); }
+  .dbox.bad .cell { background: #FFF0F6; box-shadow: inset 0 0 0 3px var(--bubblegum); }
+  .dbox.bad { animation: shake .35s; }
+  .dbox.off { opacity: .5; }
+  .dbox.off .cell { background: transparent; box-shadow: inset 0 0 0 3px #DED4EF; }
+  .dbox.small { font-size: 1.9rem; }
+  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+  .unit { font: 800 1.6rem/1 var(--display); color: var(--ink-soft); align-self: end; padding-bottom: .3em; }
+  .equals { min-height: 2.6em; margin: 10px 0 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; font: 800 1.35rem/1.1 var(--display); color: var(--ink-soft); }
+  .equals .word { font: 600 1rem/1.2 var(--body); }
+  .note { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 64px; margin-top: 6px; }
+  .note svg { width: 58px; height: 58px; flex: none; overflow: visible; }
+  .note .bubble { padding: 8px 14px; border-radius: 16px; background: #E5F2FF; font-weight: 600; color: var(--ink); }
+  .note .bubble b { font: 800 1.3rem/1 var(--display); color: var(--sky-deep); }
+
+  /* Stacked fractions, as in the race */
+  .sf { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.05; vertical-align: middle; }
+  .sf .t { padding: 0 3px 2px; border-bottom: 3px solid currentColor; }
+  .sf .b { padding-top: 2px; }
+  .mixed { display: inline-flex; align-items: center; gap: 3px; }
+  .num { width: 3.1em; padding: 2px 4px; text-align: center; font: 800 1.35rem/1.15 var(--display); color: var(--ink); background: #fff; border: 3px solid var(--card-edge); border-radius: 10px; }
+  .num:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 4px var(--lemon); }
+  .num:disabled { background: transparent; border-style: dashed; }
+  .num.ok { color: var(--mint-deep); background: #E3F8F0; border: 3px solid var(--mint); }
+  .num.bad { border-color: var(--bubblegum); background: #FFF0F6; animation: shake .35s; }
+  .num.shown { color: var(--berry); background: #FFF0F6; border: 3px solid var(--bubblegum); }
+
+  /* Bug cards (from the guest book) */
+  .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 8px; }
+  .bugcard { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 12px 4px 6px; border-radius: 14px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 2px var(--card-edge); font: 600 .95rem/1.2 var(--body); text-align: left; }
+  .bugcard svg { width: 28px; height: 34px; flex: none; overflow: visible; }
+  .bugcard .len { display: block; font: 800 1.2rem/1.1 var(--display); color: var(--ink); }
+  .bugcard .by { display: block; font-size: .72rem; line-height: 1.1; color: var(--mint-deep); }
+  .bugcard .who { display: block; font-size: .85rem; color: var(--ink-soft); }
+  button.bugcard { flex-direction: column; gap: 0; width: 86px; padding: 5px 3px 6px; text-align: center; border: 0; cursor: pointer; box-shadow: inset 0 0 0 2px var(--card-edge), 0 4px 0 var(--card-edge); transition: transform .08s ease; }
+  button.bugcard:active { transform: translateY(3px); box-shadow: inset 0 0 0 2px var(--card-edge), 0 1px 0 var(--card-edge); }
+  button.bugcard[aria-pressed="true"] { background: #FFF6D6; box-shadow: inset 0 0 0 3px var(--gold), 0 4px 0 var(--gold); }
+  button.bugcard .key { position: absolute; left: 6px; top: 4px; font-size: .75rem; color: var(--ink-soft); }
+  button.bugcard .pos { position: absolute; right: 4px; top: 3px; padding: 1px 6px; border-radius: 8px; background: var(--gold); color: #fff; font-size: .7rem; }
+  button.bugcard svg { width: 38px; height: 44px; }
+  button.bugcard .len { font-size: 1.08rem; white-space: nowrap; }
+  button.bugcard .who { font-size: .78rem; }
+  button.bugcard:disabled { cursor: default; }
+
+  /* The sum written on paper: O . t h columns with the decimal points lined up */
+  .mathrow { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: center; gap: 12px 22px; }
+  .mathrow > * { min-width: 0; }
+  @media (max-width: 560px) { .mathrow { flex-wrap: wrap; } }
+  .paper { --cell: 1.05em; --op: .9em; display: inline-grid; align-items: center; row-gap: 3px; padding: 6px 12px 8px; border-radius: 14px; background: #fff; font: 800 2rem/1.15 var(--display); color: var(--ink); }
+  .paper .head { text-align: center; font: 600 .78rem/1 var(--body); color: var(--violet); }
+  .paper .c, .paper .op, .paper .pt { text-align: center; }
+  .paper .ghost { color: #C9BBE8; }
+  .paper .q { color: #CFC3EA; }
+  .paper .rule { border-top: 4px solid var(--ink); margin: 1px 0; }
+  .paper .carry { height: 1.05em; align-self: end; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--berry); font: 800 .95rem/1 var(--display); cursor: pointer; box-shadow: inset 0 0 0 2px #EEE6FB; }
+  .paper .carry:hover { background: #FFF0F6; }
+  .paper .carry.on { box-shadow: inset 0 0 0 2px var(--bubblegum); background: #FFF0F6; }
+  .paper .carry:disabled { cursor: default; box-shadow: none; }
+  .paper .dbox { font-size: 1em; grid-column: 2 / -1; --cell: 1.05em; }
+  .paper .dbox .cell { height: 1.2em; border-radius: 8px; }
+  .paper .dbox input { height: 1.2em; }
+  .paper .key { margin: 4px 0 0; justify-self: center; font: 400 .68rem/1.25 var(--body); color: var(--ink-soft); text-align: center; white-space: pre-line; }
+  .side { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+  .fr { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; font: 800 1.3rem/1 var(--display); color: var(--ink-soft); }
+  .fr .word { flex-basis: 100%; text-align: center; font: 600 .85rem/1 var(--body); }
+  .fr .word.inline { flex-basis: auto; }
+  .steps { display: flex; flex-direction: column; gap: 3px; }
+  .gstep { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px 8px; padding: 2px 10px; border-radius: 12px; font: 800 1.12rem/1.05 var(--display); color: var(--ink); white-space: nowrap; }
+  .gstep .n { font: 600 .8rem/1 var(--body); color: var(--violet); }
+  .gstep .word { font: 600 .9rem/1.2 var(--body); color: var(--ink-soft); flex-basis: 100%; }
+  .gstep.wait { opacity: .38; }
+  .gstep.now { background: #fff; box-shadow: inset 0 0 0 2px var(--card-edge); }
+  .gstep .dbox { font-size: 1.45rem; }
+  .gstep .dbox .head { font-size: .7rem; }
+
+  .tut-dots { display: flex; gap: 6px; justify-content: center; margin-top: 4px; }
+  .tut-dots span { width: 10px; height: 10px; border-radius: 50%; background: #DDD2F5; }
+  .tut-dots span.on { background: var(--violet); }
+  .tut-big { margin: 10px 0 0; text-align: center; font: 800 1.6rem/1.3 var(--display); color: var(--ink); max-width: none; }
+  .tut-big .sf { font-size: 1.4rem; }
+
+  /* The scene */
+  #stage text { font-family: var(--body); }
+  #stage .num-label { font-family: var(--display); font-weight: 800; }
+  .bug .hop { transform-box: fill-box; transform-origin: 50% 100%; }
+  .dance .hop { animation: dance .47s ease-in-out infinite alternate; }
+  @keyframes dance { from { transform: rotate(-5deg); } to { transform: rotate(5deg) translateY(-4px); } }
+  .fade-in { animation: fadein .45s ease both; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  .heart-glow { animation: glow 1.2s ease-in-out infinite alternate; }
+  #stage .fog { transition: opacity .9s ease; }
+  #stage .fog.clear { opacity: 0; }
+  .walking .hop { animation: waddle .22s ease-in-out infinite alternate; }
+  @keyframes waddle { from { transform: rotate(-4deg); } to { transform: rotate(4deg) translateY(-3px); } }
+  @keyframes glow { from { opacity: .55; } to { opacity: 1; } }
+
+  /* Results */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 6px 0 18px; }
+  .stat { padding: 14px 16px; border-radius: var(--radius-md); background: #EAFBF4; }
+  .stat strong { display: block; font: 800 2rem/1.1 var(--display); color: var(--ink); }
+  .stat span { color: var(--ink-soft); font-size: .95rem; }
+  .star-msg { margin: 14px 0 0; padding: 14px 16px; border-radius: var(--radius-md); background: #FFF6D6; color: var(--ink); font-weight: 600; }
+  .star-msg p { margin: 0; color: var(--ink); }
+  .star-msg p + p { margin-top: 6px; }
+  .ticket-wrap { margin: 18px 0 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  .ticket-wrap .ticket::before, .ticket-wrap .ticket::after { background: var(--card); }
+  .ticket-wrap p { margin: 0; color: var(--ink); font-weight: 600; max-width: 30ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="page game">
+  <header class="topbar">
+    <a class="pill" href="index.html">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back to the map
+    </a>
+    <div class="top-tools">
+      <button class="pill" type="button" id="musicBtn" aria-pressed="true">Music: on</button>
+      <button class="pill" type="button" id="soundBtn" aria-pressed="false">Sounds: off</button>
+      <div class="gems">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 8-13 15L3 13z" fill="#7CC8FF" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 13h26M9 5l7 23 7-23M12 13l4-8 4 8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" opacity=".8"/></svg>
+        <span><strong id="gemCount">0</strong> <span id="gemName">gems</span></span>
+      </div>
+    </div>
+  </header>
+  <div id="guestSlot"></div>
+
+  <main id="intro" hidden>
+    <section class="screen-card card">
+      <p class="zone-name" id="zoneName">bug❤️shack</p>
+      <h1 id="skillTitle">Measure the guests</h1>
+      <div class="hosts" id="hosts"></div>
+      <div id="introStars"></div>
+      <div class="rules" id="rules"></div>
+      <div class="book" id="book" aria-live="polite"></div>
+      <div class="intro-actions">
+        <button class="btn btn-big" type="button" id="startBtn" disabled>Opening the door…</button>
+        <button class="btn btn-soft" type="button" id="tutBtn" disabled>Show me how</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="play" hidden>
+    <section class="board card" aria-label="bug❤️shack">
+      <div class="stage-wrap">
+        <svg id="stage" viewBox="0 0 600 560" role="img" aria-label="A bug standing next to a measuring tape"></svg>
+      </div>
+      <div class="work">
+        <div class="party" id="party" aria-hidden="true"></div>
+        <p class="caption" id="caption" aria-live="polite"></p>
+        <div class="workarea" id="workarea"></div>
+        <div class="controls" id="controls"></div>
+        <p class="tip" id="tip"></p>
+      </div>
+    </section>
+  </main>
+
+  <main id="done" hidden>
+    <section class="screen-card card">
+      <h1 id="resTitle">Party time!</h1>
+      <div class="hosts" id="resHosts"></div>
+      <div class="stats">
+        <div class="stat"><strong id="resRight">0</strong><span id="resRightLabel">right on the first try</span></div>
+        <div class="stat" id="resCaughtBox"><strong id="resCaught">0</strong><span>of Boomer's mistakes caught</span></div>
+        <div class="stat"><strong id="resGems">…</strong><span id="resGemsLabel">saving your party</span></div>
+      </div>
+      <div id="resStars"></div>
+      <div class="star-msg" id="resMsg" hidden></div>
+      <div class="ticket-wrap" id="resTicket" hidden></div>
+      <div class="actions">
+        <button class="btn" type="button" id="againBtn" disabled>Play again</button>
+        <a class="btn btn-soft" href="index.html">Back to the map</a>
+      </div>
+    </section>
+  </main>
+
+  <main id="missing" hidden>
+    <section class="screen-card card">
+      <h1>That game isn't here</h1>
+      <p>This link doesn't match a bug❤️shack game. Head back to the map and pick one there.</p>
+      <div class="actions"><a class="btn" href="index.html">Back to the map</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/api.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/bug-shack.js"></script>
+</body>
+</html>

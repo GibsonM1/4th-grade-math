@@ -36,6 +36,6 @@ window.MATH_REALM_CATALOG = {
     { prefix: 'g4.u6.', page: 'area-model.html', ready: true  },
     { prefix: 'g4.dec.', page: 'unicorn-race.html', ready: true },
     { prefix: 'g4.frac.', page: 'pet-food.html', ready: true },
-    { prefix: 'g4.bug.', page: 'bug-shack.html', ready: false },   // the bug❤️shack chat flips this to true
+    { prefix: 'g4.bug.', page: 'bug-shack.html', ready: true  },
   ],
 };
