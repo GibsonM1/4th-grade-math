@@ -2,7 +2,8 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.8.0 (name-based logins: IDs like "Maria G.", typed any way the student likes)
+ * Version 1.9.0 (import students from a tab in this spreadsheet, so the script keeps
+ * its narrow one-file permission)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -30,7 +31,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -893,46 +894,51 @@ function reloadConfig() {
 }
 
 /* ───────────── Importing students ─────────────
- * Reads one tab of a parent-directory spreadsheet and adds those students to the Roster.
- * It asks for the directory link the first time and remembers it in Script Properties,
- * so pasting a new Code.gs never wipes it. Safe to run again: students already on the
- * Roster for that class code are skipped, so only new ones are added.
+ * Reads a tab OF THIS SPREADSHEET and adds those students to the Roster.
+ *
+ * Why a tab here and not a link to the directory: line 1 of this file is @OnlyCurrentDoc,
+ * which keeps the script's permission to this one spreadsheet. That is what makes the
+ * permission prompt small and keeps the script away from everything else in your Drive,
+ * but it also means the script cannot open another spreadsheet. So bring the directory
+ * data in first, either way:
+ *   - Copy the directory columns and paste them into a new tab here, or
+ *   - put =IMPORTRANGE("<directory link>", "'Tab name'!A:H") in cell A1 of a new tab and
+ *     click Allow access once. The tab then updates by itself.
+ * Name that tab whatever you like (Directory is the default) and run this.
+ *
+ * Safe to run again: students already on the Roster for that class code are skipped,
+ * so only new ones are added.
  *
  * In the directory tab it looks for columns whose headers mention first name, last name
  * and phone. If there are no such headers it falls back to A = first, B = last, D = phone.
  */
 function importStudents() {
   const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
 
-  let url = props.getProperty('directoryUrl') || '';
-  const askUrl = ui.prompt('Import students (1 of 3)',
-    'Paste the link to the parent directory spreadsheet.' + (url ? '\n\nLeave blank to use the one you used last time.' : ''),
-    ui.ButtonSet.OK_CANCEL);
-  if (askUrl.getSelectedButton() !== ui.Button.OK) return;
-  const typed = askUrl.getResponseText().trim();
-  if (typed) url = typed;
-  if (!url) { ui.alert('No link given, so nothing was imported.'); return; }
-
-  let source;
-  try {
-    source = SpreadsheetApp.openByUrl(url);
-  } catch (err) {
-    ui.alert("Could not open that spreadsheet.\n\nCheck the link, and make sure your account can open it.\n\n" + err);
-    return;
-  }
-  props.setProperty('directoryUrl', url);
-
-  const names = source.getSheets().map(sh => sh.getName());
-  const askTab = ui.prompt('Import students (2 of 3)',
-    'Which tab of "' + source.getName() + '" holds the students?\n\n' + names.join('\n'),
+  const mine = ss.getSheets().map(sh => sh.getName());
+  const notRoster = mine.filter(n => !Object.keys(TABS).some(k => TABS[k].name === n));
+  const lastTab = props.getProperty('directoryTab') || 'Directory';
+  const askTab = ui.prompt('Import students (1 of 2)',
+    'Which tab of THIS spreadsheet holds the directory?\n\n' +
+    (notRoster.length ? 'Tabs you have added: ' + notRoster.join(', ') : 'You have not added one yet.') + '\n\n' +
+    'To make one: add a tab, then either paste the directory columns into it, or put this in A1 and click Allow access:\n' +
+    '=IMPORTRANGE("directory link", "\'Tab name\'!A:H")',
     ui.ButtonSet.OK_CANCEL);
   if (askTab.getSelectedButton() !== ui.Button.OK) return;
-  const tabName = askTab.getResponseText().trim();
-  const sheet = source.getSheetByName(tabName);
-  if (!sheet) { ui.alert('There is no tab called "' + tabName + '" in that spreadsheet.'); return; }
+  const tabName = (askTab.getResponseText().trim() || lastTab);
+  if (/^https?:/i.test(tabName)) {
+    ui.alert('That looks like a link.\n\nThis script can only read this spreadsheet (that is the @OnlyCurrentDoc line at the top of Code.gs, which keeps its permissions small). ' +
+      'Add a tab here, paste the directory columns into it or use =IMPORTRANGE, then run this again and type the tab name.');
+    return;
+  }
+  const sheet = ss.getSheetByName(tabName);
+  if (!sheet) { ui.alert('There is no tab called "' + tabName + '" in this spreadsheet.'); return; }
+  if (Object.keys(TABS).some(k => TABS[k].name === tabName)) { ui.alert('"' + tabName + '" is one of Math Realm\'s own tabs. Put the directory in a tab of its own.'); return; }
+  props.setProperty('directoryTab', tabName);
 
-  const askCode = ui.prompt('Import students (3 of 3)',
+  const askCode = ui.prompt('Import students (2 of 2)',
     'What class code should these students use to log in?\n\nShort and easy to type, like 305.',
     ui.ButtonSet.OK_CANCEL);
   if (askCode.getSelectedButton() !== ui.Button.OK) return;
@@ -940,7 +946,7 @@ function importStudents() {
   if (!classCode) { ui.alert('A class code is needed, so nothing was imported.'); return; }
 
   const last = sheet.getLastRow(), wide = Math.max(4, sheet.getLastColumn());
-  if (last < 2) { ui.alert('That tab has no rows under its header.'); return; }
+  if (last < 2) { ui.alert('The "' + tabName + '" tab has no rows under its header.'); return; }
   const values = sheet.getRange(1, 1, last, wide).getValues();
   const head = values[0].map(h => String(h).toLowerCase());
   const findCol = (words, fallback) => {
@@ -1004,7 +1010,7 @@ function importStudents() {
     return;
   }
   const ok = ui.alert('Add ' + add.length + ' student(s)?',
-    'From "' + tabName + '" into class code ' + classCode + '.\n\n' +
+    'From the "' + tabName + '" tab into class code ' + classCode + '.\n\n' +
     'Reading: first name = column ' + colLetter_(cFirst) + ', last name = ' + colLetter_(cLast) + ', phone = ' + colLetter_(cPhone) + '.\n' +
     'First few: ' + add.slice(0, 3).map(r => r.studentId + ' (' + r.studentName + ')').join(', ') + '\n\n' +
     (skipped.length ? skipped.length + ' already on the Roster will be skipped.\n' : '') +
