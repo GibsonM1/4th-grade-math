@@ -2,8 +2,8 @@
 
 /*
  * MATH REALM: backend (Google Apps Script)
- * Version 1.9.0 (import students from a tab in this spreadsheet, so the script keeps
- * its narrow one-file permission)
+ * Version 1.10.0 (the import understands "JunYu (Jason)" and uses the name the
+ * student goes by)
  *
  * This script lives inside the district Google Sheet (Extensions ▸ Apps Script).
  * The GitHub Pages site sends requests here, and all student data stays in the
@@ -31,7 +31,7 @@
  * Every reply is JSON: { ok: true, ... } or { ok: false, error: 'code' }.
  */
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const TZ = 'America/Los_Angeles';
 const SESSION_SECONDS = 6 * 60 * 60;   // a login lasts one school day (the most Apps Script's cache allows)
 const CONFIG_CACHE_SECONDS = 120;      // Settings and Skills edits take effect within 2 minutes
@@ -911,6 +911,10 @@ function reloadConfig() {
  *
  * In the directory tab it looks for columns whose headers mention first name, last name
  * and phone. If there are no such headers it falls back to A = first, B = last, D = phone.
+ *
+ * Names: a first name like "JunYu (Jason)" or 'JunYu "Jason"' means the student goes by
+ * Jason. The login and the greeting use Jason; the Roster keeps the directory's full name
+ * so you can still match a golden ticket to a cumulative file.
  */
 function importStudents() {
   const ui = SpreadsheetApp.getUi();
@@ -968,15 +972,19 @@ function importStudents() {
   });
 
   const add = [], skipped = [], noPin = [];
+  const nicknames = [];
   for (let i = 1; i < values.length; i++) {
-    const first = String(values[i][cFirst] || '').trim();
+    const nm = preferredName_(values[i][cFirst]);
+    const first = nm.called;                       // what everyone calls them: the login and the greeting
     const lastName = String(values[i][cLast] || '').trim();
     if (!first) continue;
+    if (nm.called !== nm.given) nicknames.push(nm.given + ' → ' + nm.called);
 
     // A login ID that looks like a name and is easy to type: "Maria G.". Logins ignore
     // capitals, spaces and periods, so "maria g" works too. If two students in the class
     // would end up the same, use more of the last name: "Maria Ga." then "Maria Gar.".
-    const fullName = (first + ' ' + lastName).trim();
+    // The Roster keeps the directory's name, with the called name in brackets when they differ.
+    const fullName = (nm.given + ' ' + lastName).trim() + (nm.called !== nm.given ? ' (' + nm.called + ')' : '');
     let id = '';
     for (let take = 1; take <= Math.max(1, lastName.length); take++) {
       id = (first + ' ' + lastName.slice(0, take) + (take < lastName.length ? '.' : '')).trim();
@@ -1014,7 +1022,8 @@ function importStudents() {
     'Reading: first name = column ' + colLetter_(cFirst) + ', last name = ' + colLetter_(cLast) + ', phone = ' + colLetter_(cPhone) + '.\n' +
     'First few: ' + add.slice(0, 3).map(r => r.studentId + ' (' + r.studentName + ')').join(', ') + '\n\n' +
     (skipped.length ? skipped.length + ' already on the Roster will be skipped.\n' : '') +
-    (noPin.length ? noPin.length + ' had no phone number and will get a random PIN.' : ''),
+    (noPin.length ? noPin.length + ' had no phone number and will get a random PIN.\n' : '') +
+    (nicknames.length ? nicknames.length + ' will log in with the name in brackets: ' + nicknames.slice(0, 4).join(', ') + (nicknames.length > 4 ? '…' : '') : ''),
     ui.ButtonSet.OK_CANCEL);
   if (ok !== ui.Button.OK) return;
 
@@ -1025,6 +1034,15 @@ function importStudents() {
     (noPin.length ? '\n\nThese had no phone number and got a random PIN, so check their row:\n' + noPin.join(', ') : '') +
     '\n\nStudents log in with the class code, the name in the studentId column and their PIN. ' +
     'Capitals, spaces and periods do not matter, so "Maria G.", "maria g" and "MariaG" all work.');
+}
+
+// "JunYu (Jason)" → { called: 'Jason', given: 'JunYu' }. Also handles "JunYu \"Jason\"" and
+// "JunYu 'Jason'". With no nickname, called and given are the same.
+function preferredName_(raw) {
+  const text = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  const m = text.match(/^(.*?)[\s]*[\(\["“‘']\s*([^\)\]"”’']+?)\s*[\)\]"”’']\s*$/);
+  if (m && m[1].trim() && m[2].trim()) return { called: m[2].trim(), given: m[1].trim() };
+  return { called: text, given: text };
 }
 
 function colLetter_(i) {
