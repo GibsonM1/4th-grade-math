@@ -69,19 +69,21 @@
   .say { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; margin: 6px 0 4px; font: 600 1.25rem/1.2 var(--body); }
   .dbox { --cell: 1.25em; position: relative; display: inline-grid; align-items: end; row-gap: 2px; font: 800 2.5rem/1.1 var(--display); color: var(--ink); }
   .dbox .head { text-align: center; font: 600 .85rem/1 var(--body); color: var(--violet); }
-  .dbox .cell { height: 1.3em; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 3px var(--card-edge); }
+  .dbox .cell { height: 1.3em; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 3px var(--card-edge); cursor: pointer; }
+  .dbox .cell:hover { box-shadow: inset 0 0 0 3px #CDBEF0; }
   .dbox .pt { text-align: center; align-self: end; padding-bottom: .05em; }
-  .dbox .cell.next { background: #FFF1B8; box-shadow: inset 0 0 0 3px var(--gold); }
+  /* the picked box stays marked even when you click away; it glows while you can type */
+  .dbox .cell.cur { background: #FFF8DE; box-shadow: inset 0 0 0 3px #EBCB72; }
+  .dbox .cell.live { background: #FFF1B8; box-shadow: inset 0 0 0 3px var(--gold), 0 0 0 4px var(--lemon); }
   .dbox .cell.ghost { color: #C9BBE8; }
-  .dbox input { position: absolute; left: 0; right: 0; bottom: 0; height: 1.3em; width: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: text; font-size: 16px; }
-  .dbox:focus-within .cell { box-shadow: inset 0 0 0 3px var(--violet); }
-  .dbox:focus-within .cell.next { box-shadow: inset 0 0 0 3px var(--gold), 0 0 0 4px var(--lemon); }
+  .dbox input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; font-size: 16px; }
   .dbox.ok .cell { background: #E3F8F0; box-shadow: inset 0 0 0 3px var(--mint); color: var(--mint-deep); }
   .dbox.shown .cell { background: #FFF0F6; box-shadow: inset 0 0 0 3px var(--bubblegum); color: var(--berry); }
   .dbox.bad .cell { background: #FFF0F6; box-shadow: inset 0 0 0 3px var(--bubblegum); }
   .dbox.bad { animation: shake .35s; }
   .dbox.off { opacity: .5; }
-  .dbox.off .cell { background: transparent; box-shadow: inset 0 0 0 3px #DED4EF; }
+  .dbox.off .cell { background: transparent; box-shadow: inset 0 0 0 3px #DED4EF; cursor: default; }
+  .dbox.ok .cell, .dbox.shown .cell { cursor: default; }
   .dbox.small { font-size: 1.9rem; }
   @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
   .unit { font: 800 1.6rem/1 var(--display); color: var(--ink-soft); align-self: end; padding-bottom: .3em; }
@@ -137,7 +139,9 @@
   .paper .carry:disabled { cursor: default; box-shadow: none; }
   .paper .dbox { font-size: 1em; grid-column: 2 / -1; --cell: 1.05em; }
   .paper .dbox .cell { height: 1.2em; border-radius: 8px; }
-  .paper .dbox input { height: 1.2em; }
+  .paper .scr { width: var(--cell); height: .95em; justify-self: center; align-self: end; padding: 0; text-align: center; font: 800 .62em/1 var(--display); color: var(--berry); background: #fff; border: 2px dashed #DCD0F2; border-radius: 7px; }
+  .paper .scr:focus { outline: none; border-color: var(--bubblegum); border-style: solid; }
+  .paper .scr:disabled { border-color: transparent; background: transparent; }
   .paper .key { margin: 4px 0 0; justify-self: center; font: 400 .68rem/1.25 var(--body); color: var(--ink-soft); text-align: center; white-space: pre-line; }
   .side { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
   .fr { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; font: 800 1.3rem/1 var(--display); color: var(--ink-soft); }

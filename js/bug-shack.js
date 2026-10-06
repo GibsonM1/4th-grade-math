@@ -42,7 +42,6 @@
     'g4.bug.stack':      { kind: 'stack', tut: 'stack', places: 2, px: 160, range: 3 },
     'g4.bug.build':      { kind: 'build', tut: 'build', places: 2, px: 160, range: 3 },
   };
-  const GUIDED_TO_PLAIN = 4;   // stacks added right in guided steps before the plain sum
   const BOOK_MAX = 40;
 
   const session = MathRealm.session;
@@ -365,7 +364,7 @@
 
   /* ── The guest book (this game's save) ── */
 
-  let memory = { v: 1, book: [], tut: {}, guided: 0, nextId: 1 }, memoryLoaded = false;
+  let memory = { v: 1, book: [], tut: {}, stack: { lvl: 1, wins: 0, miss: 0 }, nextId: 1 }, memoryLoaded = false;
   const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
   function kindsFor(h) { return KIND_IDS.filter(k => KINDS[k].min <= h && h <= KINDS[k].max); }
@@ -400,11 +399,11 @@
     let h, tape;
     for (let tries = 0; tries < 200; tries++) {
       if (M.places === 1) {
-        if (tier === 1) { h = pick([20, 30, 40, 60, 70, 80, 90]); tape = { labels: 'half', halfTick: true }; }
-        else if (tier === 2) { h = Math.random() < 0.55 ? pick([110, 120, 130, 140, 160, 170, 180, 190]) : pick([30, 40, 60, 70, 80, 90]); tape = { labels: 'whole', halfTick: true }; }
-        else { h = pick([20, 30, 40, 60, 70, 80, 90, 110, 120, 130, 140, 160, 170, 180, 190]); tape = { labels: 'whole', halfTick: false }; }
+        if (tier === 1) { h = pick([20, 30, 40, 60, 70, 80, 90]); tape = { labels: 'half' }; }
+        else if (tier === 2) { h = Math.random() < 0.55 ? pick([110, 120, 130, 140, 160, 170, 180, 190]) : pick([30, 40, 60, 70, 80, 90]); tape = { labels: 'whole' }; }
+        else { h = pick([20, 30, 40, 60, 70, 80, 90, 110, 120, 130, 140, 160, 170, 180, 190]); tape = { labels: 'whole' }; }
       } else {
-        tape = { labels: 'half', halfTick: true };
+        tape = { labels: 'half', hideLens: tier >= 4 };   // top level: the magnifier's numbers are gone
         if (tier === 1) h = rnd(3, 9) * 10 + (Math.random() < 0.45 ? 5 : pick([1, 2, 8, 9]));   // on the long middle mark, or next to a label
         else if (tier === 2) { h = rnd(3, 9) * 10 + rnd(1, 9); }
         else {
@@ -502,7 +501,7 @@
   const stage = $('#stage');
   const LAYER = {};
   ['bg', 'tape', 'lens', 'actors', 'over'].forEach(n => { LAYER[n] = S('g', { class: 'layer-' + n }); stage.append(LAYER[n]); });
-  const sc = { tape: { labels: 'whole', halfTick: true, fog: false }, band: null, lens: null, pointer: null, jumps: null, marks: [], heart: null, queue: 0 };
+  const sc = { tape: { labels: 'whole', fog: false }, band: null, lens: null, pointer: null, jumps: null, marks: [], heart: null, queue: 0 };
   let signHearts = 0;   // Boomer's mistakes caught this round light up the sign
 
   function drawBackdrop() {
@@ -585,9 +584,9 @@
     if (sc.band) g.append(S('rect', { x: V.TX + 1, y: yOf(sc.band[1]), width: V.TW - 2, height: yOf(sc.band[0]) - yOf(sc.band[1]), fill: '#7CC8FF', opacity: 0.55 }));
     for (let h = 0; h <= M.range * 100; h += 10) {
       const whole = h % 100 === 0, half = h % 50 === 0 && !whole;
-      const len = whole ? 30 : half && t.halfTick ? 21 : 13;
+      const len = whole ? 30 : half ? 21 : 13;   // the 0.5 marks are always a little longer
       const yy = yOf(h);
-      g.append(S('line', { x1: right, x2: right - len, y1: yy, y2: yy, stroke: INK, 'stroke-width': whole ? 3 : half && t.halfTick ? 2.4 : 1.8 }));
+      g.append(S('line', { x1: right, x2: right - len, y1: yy, y2: yy, stroke: INK, 'stroke-width': whole ? 3 : half ? 2.4 : 1.8 }));
       if (whole || (t.labels === 'half' && half) || t.labels === 'all') g.append(label(V.TX - 8, yy + 7, dec(h), whole));
     }
     if (t.fog) {
@@ -621,7 +620,7 @@
       const end = i === 0 || i === 10, mid = i === 5;
       const yy = lensY(from + i);
       g.append(S('line', { x1: right, x2: right - (end ? 28 : mid ? 20 : 12), y1: yy, y2: yy, stroke: INK, 'stroke-width': end ? 3 : mid ? 2.4 : 1.8 }));
-      if (end) g.append(T(LENS.sx - 7, yy + 7, dec(from + i), { 'text-anchor': 'end', 'font-size': 21, 'font-weight': 800, class: 'num-label' }));
+      if (end && !sc.lens.hideLabels) g.append(T(LENS.sx - 7, yy + 7, dec(from + i), { 'text-anchor': 'end', 'font-size': 21, 'font-weight': 800, class: 'num-label' }));
     }
   }
 
@@ -757,16 +756,19 @@
     d.phase = phase;
     d.answer = cur && cur.answer != null ? String(cur.answer) : '';
     d.item = String(results.length);
-    d.parts = cur && cur.kind === 'stack' ? cur.a + ',' + cur.b : cur && cur.kind === 'build' ? cur.choices.map(b => b.h).join(',') : '';
-    d.step = cur && cur.steps ? String(cur.stepIdx) : '';
+    d.parts = cur && cur.kind === 'stack' ? cur.a + ',' + cur.b : cur && cur.kind === 'build' ? (cur.type === 'missing' ? cur.target + ',' + cur.pair[0].h : cur.choices.map(b => b.h).join(',')) : '';
+    d.type = cur && cur.type ? cur.type : '';
+    d.level = cur && cur.lvl ? String(cur.lvl) : '';
+    d.part = cur && cur.parts && cur.parts[cur.pi] ? cur.parts[cur.pi].k : '';
   }
 
   /* ── Answer boxes: O . t h ──
-   * Typed normally (left to right) for reading the tape.
-   * rtl: typed hundredths first, filling from the right, like adding on paper (sums).
+   * Each digit has its own box. Click a box (or use the arrow keys) to pick it; the picked box stays
+   * highlighted, typing writes there, Backspace erases. Readings are typed normally (left to right);
+   * rtl boxes (sums) fill from the right, hundredths first, like adding on paper.
    */
   function decimalBox(o) {
-    const places = o.places, cols = places + 1;
+    const places = o.places, cols = places + 1, step = o.rtl ? -1 : 1;
     const box = el('div', 'dbox' + (o.small ? ' small' : ''));
     box.style.gridTemplateColumns = 'var(--cell) .45em var(--cell)' + (places === 2 ? ' var(--cell)' : '');
     if (o.heads !== false) {
@@ -776,126 +778,145 @@
         box.append(h);
       });
     }
-    const cells = [];
-    const mk = () => { const c = el('span', 'cell'); cells.push(c); return c; };
-    box.append(mk(), el('span', 'pt', '.'), mk());
-    if (places === 2) box.append(mk());
     const input = el('input');
     input.type = 'text';
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.inputMode = o.rtl ? 'numeric' : 'decimal';
-    input.setAttribute('aria-label', o.label + (o.rtl ? '. Type the ' + (places === 2 ? 'hundredths' : 'tenths') + ' digit first.' : ''));
+    input.setAttribute('aria-label', o.label + (o.rtl ? '. Type the ' + (places === 2 ? 'hundredths' : 'tenths') + ' digit first.' : '') + ' Use the arrow keys to move between digits.');
+    const PLACE = ['ones', 'tenths', 'hundredths'];
+    const cells = [];
+    let vals = new Array(cols).fill(''), cursor = o.rtl ? cols - 1 : 0, locked = false, typedLast = false, touched = false;
+    const mk = i => {
+      const c = el('span', 'cell');
+      c.setAttribute('aria-hidden', 'true');
+      c.addEventListener('pointerdown', e => {
+        if (locked || input.disabled) return;
+        e.preventDefault();
+        cursor = i;
+        typedLast = false;
+        input.focus({ preventScroll: true });
+        paint();
+      });
+      cells.push(c);
+      return c;
+    };
+    box.append(mk(0), el('span', 'pt', '.'), mk(1));
+    if (places === 2) box.append(mk(2));
     box.append(input);
+    const SENT = ' ';   // keeps Backspace working on phone keyboards
+    input.value = SENT;
 
-    let st = { o: '', d: '', pt: false };   // typed normally
-    let digits = '';                         // typed from the right
-    let locked = false;
-
-    function norm(raw) {
-      const s = raw.replace(/[^0-9.]/g, '');
-      const i = s.indexOf('.');
-      let on, dn, pt;
-      if (i >= 0) { on = s.slice(0, i); dn = s.slice(i + 1).replace(/\./g, ''); pt = true; }
-      else { on = s.slice(0, 1); dn = s.slice(1); pt = s.length > 1; }   // a second digit moves past the point
-      return { o: on.slice(-1), d: dn.slice(0, places), pt: pt };
-    }
     function paint() {
-      if (locked) return;
       const focused = document.activeElement === input && !input.disabled;
-      let shown, next = -1;
-      if (o.rtl) {
-        shown = [];
-        for (let i = 0; i < cols; i++) { const k = i - (cols - digits.length); shown.push(k >= 0 ? digits[k] : ''); }
-        if (digits.length < cols) next = cols - 1 - digits.length;
-      } else {
-        shown = [st.o, st.d[0] || '', st.d[1] || ''].slice(0, cols);
-        if (!st.o && !st.pt) next = 0;
-        else if (st.d.length < places) next = 1 + st.d.length;
-      }
       cells.forEach((c, i) => {
-        c.textContent = shown[i];
+        if (locked) return;
+        c.textContent = vals[i];
         c.classList.remove('ghost');
-        c.classList.toggle('next', focused && i === next);
+        c.classList.toggle('cur', touched && i === cursor && !input.disabled);
+        c.classList.toggle('live', focused && i === cursor);
       });
     }
-    const toEnd = () => { const n = input.value.length; try { input.setSelectionRange(n, n); } catch (e) { /* not focusable yet */ } };
-    if (o.rtl) {
-      input.addEventListener('beforeinput', e => {
-        const all = input.value && input.selectionStart === 0 && input.selectionEnd === input.value.length;
-        if (e.inputType === 'insertText' || e.inputType === 'insertReplacementText' || e.inputType === 'insertFromPaste') {
-          e.preventDefault();
-          if (/\./.test(e.data || '') && o.onDot) o.onDot();
-          const d = String(e.data || '').replace(/[^0-9]/g, '');
-          if (!d) return;
-          if (d.length > 1) digits = d.slice(-cols);
-          else if (all) digits = d;
-          else if (digits.length < cols) digits = d + digits;
-        } else if (e.inputType.indexOf('delete') === 0) {
-          e.preventDefault();
-          digits = all ? '' : digits.slice(1);
-        } else return;
-        input.value = digits;
-        paint();
-        if (o.onChange) o.onChange();
+    function changed() { input.value = SENT; paint(); if (o.onChange) o.onChange(); }
+    function put(d) {
+      if (cursor < 0 || cursor >= cols) return;
+      vals[cursor] = d;
+      typedLast = true;
+      const nx = cursor + step;
+      if (nx >= 0 && nx < cols) cursor = nx;
+      else cursor = -9;   // past the last box: nothing highlighted until they pick one
+    }
+    // Backspace: right after typing, erase that digit; on a box you picked, erase it, then keep going back
+    function back() {
+      if (!typedLast && cursor >= 0 && cursor < cols && vals[cursor]) { vals[cursor] = ''; return; }
+      typedLast = false;
+      const prev = cursor === -9 ? (o.rtl ? 0 : cols - 1) : cursor - step;
+      if (prev < 0 || prev >= cols) return;
+      cursor = prev;
+      vals[cursor] = '';
+    }
+    function typeText(text) {
+      String(text).split('').forEach(ch => {
+        if (/[0-9]/.test(ch)) put(ch);
+        else if (ch === '.' || ch === ',') {
+          if (o.rtl) { if (o.onDot) o.onDot(); }
+          else cursor = 1;   // jump to the tenths
+        }
       });
-      input.addEventListener('input', () => { digits = input.value.replace(/[^0-9]/g, '').slice(0, cols); input.value = digits; paint(); });
-    } else {
-      input.addEventListener('input', () => {
-        st = norm(input.value);
-        input.value = st.o + (st.pt ? '.' + st.d : '');
-        toEnd();
-        paint();
-        if (o.onChange) o.onChange();
-      });
+      changed();
+    }
+    function move(d) {
+      typedLast = false;
+      if (cursor === -9) cursor = o.rtl ? 0 : cols - 1;
+      else cursor = Math.max(0, Math.min(cols - 1, cursor + d));
+      paint();
     }
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); if (o.onEnter) o.onEnter(); }
-      else if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(e.key) >= 0) e.preventDefault();
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Enter') { e.preventDefault(); if (o.onEnter) o.onEnter(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); move(1); return; }
+      if (e.key === 'Home') { e.preventDefault(); cursor = 0; paint(); return; }
+      if (e.key === 'End') { e.preventDefault(); cursor = cols - 1; paint(); return; }
+      if (e.key === 'Backspace') { e.preventDefault(); back(); changed(); return; }
+      if (e.key === 'Delete') { e.preventDefault(); if (cursor >= 0 && cursor < cols) vals[cursor] = ''; changed(); return; }
+      if (e.key.length === 1) { e.preventDefault(); typeText(e.key); }
     });
-    input.addEventListener('focus', () => { toEnd(); paint(); });
-    input.addEventListener('click', toEnd);
+    // Phone keyboards often skip keydown, so catch the text here too
+    input.addEventListener('beforeinput', e => {
+      e.preventDefault();
+      if (e.inputType.indexOf('delete') === 0) { back(); changed(); }
+      else if (e.data) typeText(e.data);
+    });
+    input.addEventListener('input', () => { input.value = SENT; });
+    input.addEventListener('focus', () => { touched = true; paint(); });
     input.addEventListener('blur', paint);
+    box.addEventListener('pointerdown', e => {
+      if (e.target === box && !locked && !input.disabled) { e.preventDefault(); input.focus({ preventScroll: true }); }
+    });
     paint();
 
-    return {
+    const api = {
       el: box,
       input: input,
       value() {
-        if (o.rtl) {
-          if (!digits) return null;
-          const p = digits.padStart(cols, '0');
-          return Number(p[0]) * 100 + Number(p[1]) * 10 + (places === 2 ? Number(p[2]) : 0);
-        }
-        if (!st.o && !st.d) return null;
-        return Number(st.o || 0) * 100 + Number(st.d[0] || 0) * 10 + Number(st.d[1] || 0);
+        if (vals.every(v => v === '')) return null;
+        return Number(vals[0] || 0) * 100 + Number(vals[1] || 0) * 10 + (places === 2 ? Number(vals[2] || 0) : 0);
       },
-      filled() { return o.rtl ? digits.length : (st.o ? 1 : 0) + st.d.length; },
+      filled() { return vals.filter(v => v !== '').length; },
       typed() {
-        if (o.rtl) { const p = digits.padStart(cols, '0'); return p[0] + '.' + p.slice(1); }
-        return (st.o || '0') + (st.d ? '.' + st.d : '');
+        if (o.rtl) return (vals[0] || '0') + '.' + vals.slice(1).map(v => v || '0').join('');
+        const t = vals[1] || '', h = vals[2] || '';
+        if (!t && !h) return vals[0] || '0';
+        return (vals[0] || '0') + '.' + (t || '0') + h;
       },
-      // Show an answer (ok = theirs, shown = the game's). A tenth on the hundredths level gets a faint 0.
+      // Show an answer (ok = theirs, shown = the game's). A tenth among hundredths gets a faint 0.
       set(h, cls) {
-        const vals = [String(onesOf(h)), String(tenthsOf(h)), String(hundOf(h))].slice(0, cols);
-        cells.forEach((c, i) => { c.textContent = vals[i]; c.classList.remove('next'); c.classList.toggle('ghost', i === 2 && hundOf(h) === 0 && !o.rtl); });
+        const v = [String(onesOf(h)), String(tenthsOf(h)), String(hundOf(h))].slice(0, cols);
+        cells.forEach((c, i) => {
+          c.textContent = v[i];
+          c.classList.remove('cur', 'live');
+          c.classList.toggle('ghost', i === 2 && hundOf(h) === 0 && !o.noGhost);
+        });
+        vals = v.slice();
         locked = true;
         input.disabled = true;
         box.classList.remove('bad', 'off');
         if (cls) box.classList.add(cls);
       },
       clear() {
-        st = { o: '', d: '', pt: false };
-        digits = '';
-        input.value = '';
+        vals = new Array(cols).fill('');
+        cursor = o.rtl ? cols - 1 : 0;
         locked = false;
-        box.classList.remove('ok', 'shown');
+        box.classList.remove('ok', 'shown', 'bad');
         paint();
       },
       bad() { box.classList.remove('bad'); void box.offsetWidth; box.classList.add('bad'); },
-      enable(on) { input.disabled = !on; box.classList.toggle('off', !on); paint(); },
-      focus() { if (!input.disabled) input.focus(); },
+      enable(on) { if (locked) return; input.disabled = !on; box.classList.toggle('off', !on); paint(); },
+      focus() { if (!input.disabled) { input.focus({ preventScroll: true }); paint(); } },
+      place: () => PLACE[cursor] || '',
     };
+    return api;
   }
 
   // A number box for a fraction's top: 70 in 70/100
@@ -923,56 +944,88 @@
     if (cls) i.classList.add(cls);
   }
 
-  // The sum written on paper: carries, both heights, a rule, the total.
-  //   answer: 'input' (typed from the right), or a length in hundredths to show, or null for "?"
-  function paperSum(a, b, opts) {
-    const cols = opts.cols, places = cols - 1;
+  // The sum (or difference) written on paper: helper row, two numbers, a rule, the answer.
+  //   rows[i]: a length in hundredths, 'input' (the student writes it), or null (blank until picked)
+  //   answer:  'input' (typed from the right), a length to show, or null for "?"
+  //   helper:  'carry' (tap to write a 1) or 'scratch' (little boxes for regrouping when subtracting)
+  function paperSum(opts) {
+    const cols = opts.cols, places = cols - 1, op = opts.op || '+';
     const p = el('div', 'paper');
-    if (opts.small) p.style.fontSize = '1.5rem';
+    if (opts.size) p.style.fontSize = opts.size;
     p.style.gridTemplateColumns = 'var(--op) var(--cell) .45em var(--cell)' + (places === 2 ? ' var(--cell)' : '');
     const cell = (cls, text) => { const c = el('span', cls, text); p.append(c); return c; };
     cell('', ''); cell('head', 'O'); cell('head', ''); cell('head', 't'); if (places === 2) cell('head', 'h');
-    // carry boxes over the ones and (on the hundredths sums) the tenths: tap to write a 1
-    const carry = {};
-    const carryBox = (into) => {
-      const c = el('button', 'carry');
-      c.type = 'button';
-      c.setAttribute('aria-label', 'Carry a 1 into the ' + into);
-      c.setAttribute('aria-pressed', 'false');
-      c.disabled = !opts.carries;
-      c.addEventListener('click', () => {
-        const on = c.textContent !== '1';
-        c.textContent = on ? '1' : '';
-        c.classList.toggle('on', on);
-        c.setAttribute('aria-pressed', String(on));
-        c.blur();
-        if (opts.refocus) opts.refocus();
-      });
-      p.append(c);
-      return c;
-    };
-    if (opts.carries) {
+    const carry = {}, scratch = [];
+    if (opts.helper === 'carry') {
+      const carryBox = (into, on) => {
+        const c = el('button', 'carry' + (on ? ' on' : ''), on ? '1' : '');
+        c.type = 'button';
+        c.setAttribute('aria-label', 'Carry a 1 into the ' + into);
+        c.setAttribute('aria-pressed', String(!!on));
+        c.disabled = !!opts.still;
+        c.addEventListener('click', () => {
+          const now = c.textContent !== '1';
+          c.textContent = now ? '1' : '';
+          c.classList.toggle('on', now);
+          c.setAttribute('aria-pressed', String(now));
+          c.blur();
+          if (opts.refocus) opts.refocus();
+        });
+        p.append(c);
+        return c;
+      };
+      const pre = opts.showCarry || {};
       cell('', '');
-      carry.o = carryBox('ones');
+      carry.o = carryBox('ones', pre.o);
       cell('', '');
-      if (places === 2) { carry.t = carryBox('tenths'); cell('', ''); } else cell('', '');
+      if (places === 2) { carry.t = carryBox('tenths', pre.t); cell('', ''); } else cell('', '');
+    } else if (opts.helper === 'scratch') {
+      cell('', '');
+      const mkS = place => {
+        const i = el('input', 'scr');
+        i.type = 'text'; i.inputMode = 'numeric'; i.maxLength = 2; i.autocomplete = 'off';
+        i.setAttribute('aria-label', 'Scratch space over the ' + place + ' (for regrouping)');
+        i.addEventListener('input', () => { i.value = i.value.replace(/[^0-9]/g, '').slice(0, 2); });
+        i.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (opts.refocus) opts.refocus(); } });
+        if (opts.still) i.disabled = true;
+        p.append(i);
+        scratch.push(i);
+        return i;
+      };
+      mkS('ones'); cell('', ''); mkS('tenths'); if (places === 2) mkS('hundredths');
     }
-    const row = (op, h) => {
-      cell('op', op);
-      cell('c', String(onesOf(h)));
-      cell('pt', '.');
-      cell('c', String(tenthsOf(h)));
-      if (places === 2) cell('c' + (den10(h) ? ' ghost' : ''), String(hundOf(h)));   // 0.7 = 0.70
-    };
-    if (a === null) { ['', '+'].forEach(op => { cell('op', op); cell('c q', '?'); cell('pt', '.'); cell('c q', '?'); if (places === 2) cell('c q', '?'); }); }
-    else { row('', a); row('+', b); }
+    const rowBoxes = [null, null], rowCells = [null, null];
+    function fillCells(cs, h) {
+      const v = h == null ? ['?', '?', '?'] : [String(onesOf(h)), String(tenthsOf(h)), String(hundOf(h))];
+      cs.forEach((c, i) => {
+        c.textContent = v[i];
+        c.className = 'c' + (h == null ? ' q' : '') + (h != null && i === 2 && hundOf(h) === 0 ? ' ghost' : '');   // 0.7 = 0.70
+      });
+    }
+    [0, 1].forEach(r => {
+      cell('op', r ? op : '');
+      const spec = opts.rows[r];
+      if (spec === 'input') {
+        const bx = decimalBox({ places: places, heads: false, label: (r ? 'Second' : 'First') + ' height, in centimeters', onEnter: opts.onRowEnter, noGhost: false });
+        bx.el.classList.add('inrow');
+        p.append(bx.el);
+        rowBoxes[r] = bx;
+      } else {
+        const cs = [cell('c', '')];
+        cell('pt', '.');
+        cs.push(cell('c', ''));
+        if (places === 2) cs.push(cell('c', ''));
+        rowCells[r] = cs;
+        fillCells(cs, spec);
+      }
+    });
     const rule = el('span', 'rule');
     rule.style.gridColumn = '1 / -1';
     p.append(rule);
     cell('', '');
     let box = null, ans = [];
     if (opts.answer === 'input') {
-      box = decimalBox({ places: places, rtl: true, heads: false, label: 'The total height', onEnter: opts.onEnter, onDot: opts.onDot });
+      box = decimalBox({ places: places, rtl: true, heads: false, label: op === '+' ? 'The total height' : 'The missing height', onEnter: opts.onEnter, onDot: opts.onDot, onChange: opts.onChange });
       p.append(box.el);
     } else {
       ans = [cell('c q', '?'), cell('pt', '.'), cell('c q', '?')];
@@ -981,30 +1034,34 @@
     const key = el('p', 'key', 'O = ones, t = tenths' + (places === 2 ? ',\nh = hundredths' : ''));
     key.style.gridColumn = '1 / -1';
     p.append(key);
-    function showAnswer(h) {
-      if (box) { box.set(h, 'shown'); return; }
+    function showAnswer(h, cls) {
+      if (box) { box.set(h, cls || 'shown'); return; }
       const v = [String(onesOf(h)), '.', String(tenthsOf(h)), String(hundOf(h))];
       ans.forEach((c, i) => { c.textContent = v[i]; c.classList.remove('q'); });
     }
     if (typeof opts.answer === 'number') showAnswer(opts.answer);
     return {
-      el: p, box: box, carry: carry, showAnswer: showAnswer,
+      el: p, box: box, rows: rowBoxes, carry: carry, showAnswer: showAnswer,
+      setRow(r, h) { if (rowCells[r]) fillCells(rowCells[r], h); else if (rowBoxes[r] && h != null) rowBoxes[r].set(h, 'shown'); },
       showCarries(x, y) {
         const c = carries(x, y);
         const set = (btn, on) => { if (!btn) return; btn.textContent = on ? '1' : ''; btn.classList.toggle('on', on); btn.disabled = true; };
         set(carry.t, places === 2 && c.c1);
         set(carry.o, places === 2 ? c.c2 : tenthsOf(x) + tenthsOf(y) >= 10);
       },
-      lock() { Object.keys(carry).forEach(k => { carry[k].disabled = true; }); },
+      lock() { Object.keys(carry).forEach(k => { carry[k].disabled = true; }); scratch.forEach(i => { i.disabled = true; }); },
     };
   }
 
   // A bug's card from the guest book
-  function bugCard(bug) {
+  function bugCard(bug, asFraction) {
     const c = el('div', 'bugcard');
     c.append(bugIcon(bug));
     const t = el('span');
-    t.append(el('span', 'who', bug.n + ' the ' + KINDS[bug.k].name), el('span', 'len', dec(bug.h) + ' cm'));
+    const len = el('span', 'len');
+    if (asFraction) len.append(hFrac(bug.h, den10(bug.h) ? 10 : 100), document.createTextNode(' cm'));
+    else len.textContent = dec(bug.h) + ' cm';
+    t.append(el('span', 'who', bug.n + ' the ' + KINDS[bug.k].name), len);
     t.append(el('span', 'by', bug.by === 'you' ? '✓ You measured this one' : 'From the guest book'));
     c.append(t);
     return c;
@@ -1013,7 +1070,7 @@
   /* ── Round state ── */
 
   let phase = 'idle', cur = null, results = [], round = null, tier = 1, used = [], usedPairs = [];
-  let boomer = { made: 0, caught: 0 }, roundGuided = false;
+  let boomer = { made: 0, caught: 0 };
 
   function caption(text, tone) {
     const c = $('#caption');
@@ -1055,6 +1112,10 @@
     box.append(slots);
   }
 
+  function maxTier() {
+    const m = session.mastery[skillId] || {};
+    return M.kind === 'measure' && M.places === 2 && ((m.days || 0) >= 1 || m.status === 'mastered') ? 4 : 3;
+  }
   function startTier() {
     const m = session.mastery[skillId] || {};
     return (m.days || 0) >= 1 || m.status === 'mastered' ? 2 : 1;
@@ -1062,7 +1123,6 @@
   function startRound() {
     results = []; used = []; usedPairs = []; boomer = { made: 0, caught: 0 }; signHearts = 0;
     tier = startTier();
-    roundGuided = M.kind === 'stack' && guidedStage();   // the stage is picked once per round
     round = MathRealm.startRound(GAME_ID, skillId);
     show('#play');
     drawBackdrop();
@@ -1083,7 +1143,7 @@
     round.record({ prompt: rec.prompt, answer: rec.answer.slice(0, 60), correct: rec.correct, hintUsed: rec.hintUsed });
     const first = rec.correct && !rec.hintUsed;
     results.push({ first: first, correct: rec.correct, bug: rec.bug });
-    if (first) tier = Math.min(3, tier + 1);
+    if (first) tier = Math.min(maxTier(), tier + 1);
     else if (!rec.correct) tier = Math.max(1, tier - 1);
     paintParty();
     paintPartyCount();
@@ -1135,6 +1195,7 @@
   }
   function measureHintMarks() {
     if (M.places === 2) {
+      sc.lens.hideLabels = false;
       const f = sc.lens.from;
       sc.marks = [{ h: f, where: 'lens' }];
       sc.jumps = { from: f, to: f + 1, step: 1, where: 'lens', text: '0.01' };
@@ -1143,6 +1204,7 @@
       sc.marks = [{ h: base, where: 'tape' }];
       sc.jumps = { from: base, to: base + 10, step: 10, where: 'tape', text: '0.1 cm' };
     }
+    renderLens();
     renderOver();
   }
   function measureFeedback(v) {
@@ -1176,6 +1238,7 @@
         (n <= 5 ? ': ' + steps.join(', ') : ' to ' + dec(h)) + '. That\'s ' + fracText(h, 10) + ' cm.';
     }
     const f = sc.lens.from;
+    sc.lens.hideLabels = false;
     const down = f + 10 - h <= 3 && h - f > 5;
     const from = down ? f + 10 : f, n = Math.abs(h - from);
     sc.jumps = n ? { from: from, to: h, step: 1, where: 'lens' } : null;
@@ -1199,7 +1262,7 @@
     const p = makeMeasure(tier, used);
     cur = Object.assign(p, { kind: 'measure', answer: p.h, tries: 0, helped: false, typed: [], claim: null });
     sc.tape = Object.assign({ fog: false }, p.tape);
-    sc.lens = M.places === 2 ? { from: den10(p.h) ? p.h - 10 : Math.floor(p.h / 10) * 10 } : null;
+    sc.lens = M.places === 2 ? { from: den10(p.h) ? p.h - 10 : Math.floor(p.h / 10) * 10, hideLabels: !!p.tape.hideLens } : null;
     sc.band = sc.lens ? [sc.lens.from, sc.lens.from + 10] : null;
     sc.pointer = null; sc.jumps = null; sc.marks = []; sc.heart = null;
     clearActors();
@@ -1234,9 +1297,11 @@
       cur.note.append(boomerIcon(null), b);
       caption('Boomer the bouncer already wrote ' + cur.bug.n + '\'s badge: ' + dec(cur.claim.v) + ' cm. Read the tape yourself. How tall is ' + cur.bug.n + '?', 'boomer');
     } else {
-      caption('Read the tape where the pointer touches it. How tall is ' + cur.bug.n + '?');
+      caption(sc.lens && sc.lens.hideLabels
+        ? 'The magnifier has no numbers now! Use the big tape to find which tenth it shows (the blue part). How tall is ' + cur.bug.n + '?'
+        : 'Read the tape where the pointer touches it. How tall is ' + cur.bug.n + '?');
     }
-    tip(M.places === 2 ? 'Use the magnifier to count the hundredths. Type the height, then press Enter.' : 'Type the height, then press Enter.');
+    tip(M.places === 2 ? 'Count the hundredths in the magnifier. Press Enter to check.' : 'Type the height, then press Enter.');
     phase = 'answer';
     cur.box.enable(true);
     controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkMeasure }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, on: measureHint }]);
@@ -1316,30 +1381,69 @@
     return ' Boomer was wrong too: ' + c.why.charAt(0).toLowerCase() + c.why.slice(1);
   }
 
-  /* ── Stacking: add the two heights ──
-   * guided  three short steps in fractions: 0.7 = 70/100, 70/100 + 45/100 = 115/100, 115/100 = 1.15
-   * plain   the sum on paper, typed hundredths first, with the fractions alongside
-   * Students move on after GUIDED_TO_PLAIN stacks done right without help, or after a star here.
+  /* ── Stacking: add the two heights on paper ──
+   * Every stack is added on paper, with the decimal points lined up and tap-to-carry boxes.
+   * Scaffolds come off as the student succeeds (LEVEL_UP first-try stacks per level) and come back
+   * after two misses in a row:
+   *   1  both heights are on the paper; type the total, hundredths first
+   *   2  then write the total as a fraction: 70/100 + 45/100 = ?/100
+   *   3  then write all three fractions
+   *   4  the paper is blank: copy the heights from the guest book into the right places first
+   *   5  the guest book shows fractions (6/10, 55/100): write them as decimals, add, write the total fraction
+   * Fractions sit beside every sum because adding tenths and hundredths as fractions is 4th grade
+   * (4.NF.5, 4.NF.3); adding decimals as decimals is 5th grade (5.NBT.7).
    */
-  function guidedStage() {
-    const m = session.mastery[skillId] || {};
-    return !(m.status === 'mastered' || (m.days || 0) >= 1 || (memory.guided || 0) >= GUIDED_TO_PLAIN);
+  const LEVEL_UP = 4;
+  const LEVEL_NEWS = {
+    2: 'New challenge! After you add, write the total as a fraction too.',
+    3: 'New challenge! Now you write all the fractions.',
+    4: 'New challenge! Copy the heights onto the paper yourself. Line up the decimal points!',
+    5: 'New challenge! The guest book shows fractions now. Write them as decimals on the paper.',
+  };
+  let levelNews = '';
+  function stackLevel() { const s = memory.stack || {}; return clamp(Number(s.lvl) || 1, 1, 5); }
+  function levelAfter(first, right) {
+    const s = memory.stack = Object.assign({ lvl: 1, wins: 0, miss: 0 }, memory.stack || {});
+    if (first) {
+      s.miss = 0;
+      if (++s.wins >= LEVEL_UP && s.lvl < 5) { s.lvl++; s.wins = 0; levelNews = LEVEL_NEWS[s.lvl]; }
+    } else if (!right) {
+      if (++s.miss >= 2 && s.lvl > 1) { s.lvl--; s.wins = 0; s.miss = 0; }
+    } else s.miss = 0;
   }
   const colsFor = (a, b) => den10(a) && den10(b) ? 2 : 3;
   function noCarrySum(a, b) {
     return (onesOf(a) + onesOf(b)) * 100 + ((tenthsOf(a) + tenthsOf(b)) % 10) * 10 + (hundOf(a) + hundOf(b)) % 10;
   }
-  function fracLine(a, b, total) {   // As fractions: 70/100 + 45/100 = 115/100 = 1 15/100
-    const den = colsFor(a, b) === 2 ? 10 : 100;
-    const box = el('div', 'fr');
-    box.append(el('span', 'word', 'As fractions:'), hFrac(a, den, true), document.createTextNode('+'), hFrac(b, den, true), document.createTextNode('='));
-    if (total == null) box.append(document.createTextNode('?'));
+  // As fractions: 70/100 + 45/100 = 115/100 = 1 15/100. ask: 'total' or 'all' puts boxes in the tops.
+  function fracAsk(a, b, total, o) {
+    o = o || {};
+    const op = o.op || '+';
+    const den = o.den || (a != null && b != null && colsFor(a, b) === 2 ? 10 : 100), n = h => den === 10 ? h / 10 : h;
+    const box = el('div', 'fr'), inputs = [];
+    box.append(el('span', 'word', o.word || 'As fractions:'));
+    const part = (h, ask, label) => {
+      if (ask) {
+        const i = numInput(label, o.onEnter || (() => {}));
+        i.disabled = true;
+        inputs.push({ input: i, answer: n(h) });
+        return fracWithInput(i, den);
+      }
+      if (h == null) return document.createTextNode('?');
+      return hFrac(h, den, true);
+    };
+    const all = o.ask === 'all';
+    box.append(part(a, all, 'First height as a fraction'), document.createTextNode(op), part(b, all, 'Second height as a fraction'), document.createTextNode('='));
+    if (o.ask) box.append(part(total, true, (op === '+' ? 'The total' : 'The difference') + ' in ' + (den === 10 ? 'tenths' : 'hundredths')));
+    else if (total == null) box.append(document.createTextNode('?'));
     else {
       box.append(hFrac(total, den, true));
-      if (total >= (den === 10 ? 100 : 100)) box.append(document.createTextNode('='), hFrac(total, den));
+      if (total >= 100) box.append(document.createTextNode('='), hFrac(total, den));
     }
-    return box;
+    return { el: box, inputs: inputs };
   }
+  const fracLine = (a, b, total, op) => fracAsk(a, b, total, { op: op }).el;
+
   function stackClaim(a, b) {
     const t = a + b, opts = [];
     if (den10(a) !== den10(b)) {
@@ -1353,12 +1457,55 @@
     return Math.random() < 0.5 ? opts[0] : pick(opts);
   }
 
+  // What went wrong in a sum a + b when the student wrote v
+  function sumFeedback(a, b, v) {
+    const t = a + b, c = carries(a, b), cols = colsFor(a, b);
+    if (den10(a) !== den10(b)) {
+      const tt = den10(a) ? a : b, hh = den10(a) ? b : a;
+      if (v === tt / 10 + hh) return 'Line up the decimal points! ' + dec(tt) + ' is ' + (tt / 10) + ' tenths, the same as ' + tt + ' hundredths (' + dec2(tt) + ').';
+    }
+    if (den10(a) && den10(b) && t >= 100 && v === t / 10) return (a / 10) + ' tenths + ' + (b / 10) + ' tenths = ' + (t / 10) + ' tenths. That\'s 1 whole and ' + (t / 10 - 10) + ' tenths, so write a 1 in the ones place.';
+    if (v === noCarrySum(a, b) && (c.c1 || c.c2)) {
+      if (cols === 3 && c.c1) { const s = hundOf(a) + hundOf(b); return 'Check your regrouping. In the hundredths, ' + hundOf(a) + ' + ' + hundOf(b) + ' = ' + s + '. That\'s 1 tenth and ' + (s - 10) + ' hundredths: write ' + (s - 10) + ' and carry 1 to the tenths.'; }
+      const s = tenthsOf(a) + tenthsOf(b) + (c.c1 ? 1 : 0);
+      return 'Check your regrouping. In the tenths, ' + s + ' tenths is 1 whole and ' + (s - 10) + ' tenths: write ' + (s - 10) + ' and carry 1 to the ones.';
+    }
+    const want = String(cols === 2 ? t / 10 : t).padStart(cols, '0'), got = String(cols === 2 ? Math.floor(v / 10) : v).padStart(cols, '0');
+    if (got.split('').reverse().join('') === want && got !== want) return 'It looks like you typed from the left. In a sum, start on the right: type the ' + (cols === 3 ? 'hundredths' : 'tenths') + ' digit first.';
+    return 'Add one column at a time, starting on the right. Remember: 10 hundredths make 1 tenth, and 10 tenths make 1 whole.';
+  }
+  function sumExplain(a, b) {
+    const t = a + b, cols = colsFor(a, b), parts = [];
+    let carry = 0;
+    if (cols === 3) {
+      const s = hundOf(a) + hundOf(b);
+      parts.push('Hundredths: ' + hundOf(a) + ' + ' + hundOf(b) + ' = ' + s + (s >= 10 ? ', so write ' + (s - 10) + ' and carry 1.' : '.'));
+      carry = s >= 10 ? 1 : 0;
+    }
+    const s2 = tenthsOf(a) + tenthsOf(b) + carry;
+    parts.push('Tenths: ' + tenthsOf(a) + ' + ' + tenthsOf(b) + (carry ? ' + 1' : '') + ' = ' + s2 + (s2 >= 10 ? ', so write ' + (s2 - 10) + ' and carry 1.' : '.'));
+    parts.push('Ones: ' + (onesOf(a) + onesOf(b) + (s2 >= 10 ? 1 : 0)) + '.');
+    return dec(a) + ' + ' + dec(b) + ' = ' + dec(t) + '. ' + parts.join(' ');
+  }
+  function placeWords(h) {
+    const o = onesOf(h), t = tenthsOf(h), u = hundOf(h);
+    return dec(h) + ' has ' + o + (o === 1 ? ' one, ' : ' ones, ') + t + (t === 1 ? ' tenth' : ' tenths') + (u ? ' and ' + u + (u === 1 ? ' hundredth' : ' hundredths') : '') + '.';
+  }
+  const asFrac = h => fracText(h, den10(h) ? 10 : 100);
+
   async function startStack() {
     phase = 'walking';
     const [A, B] = makePair(tier, usedPairs);
-    const total = A.h + B.h;
-    cur = { kind: 'stack', a: A.h, b: B.h, A: A, B: B, answer: total, tries: 0, helped: false, typed: [], guided: roundGuided, claim: null, missed: false };
-    sc.tape = { labels: 'whole', halfTick: true, fog: true };
+    const total = A.h + B.h, lvl = stackLevel();
+    const ask = lvl === 1 ? '' : lvl === 3 || lvl === 4 ? 'all' : 'total';
+    cur = { kind: 'stack', a: A.h, b: B.h, A: A, B: B, answer: total, lvl: lvl, ask: ask, tries: 0, helped: false, typed: [], claim: null, missed: false, retried: false };
+    const parts = [];
+    if (lvl >= 4) parts.push({ k: 'rows', tries: 0 });
+    parts.push({ k: 'sum', tries: 0 });
+    if (ask) parts.push({ k: 'fracs', tries: 0 });
+    cur.parts = parts;
+    cur.pi = 0;
+    sc.tape = { labels: 'whole', fog: true };
     sc.lens = null; sc.band = null; sc.pointer = null; sc.jumps = null; sc.marks = []; sc.heart = null;
     clearActors();
     hideBoomer();
@@ -1366,9 +1513,19 @@
     stage.setAttribute('aria-label', B.n + ' is standing on ' + A.n + '\'s head. The measuring tape is foggy.');
 
     const cards = el('div', 'cards');
-    cards.append(bugCard(A), bugCard(B));
-    if (cur.guided) buildGuided(cards); else buildPlain(cards);
-    caption(B.n + ' (' + dec(B.h) + ' cm) climbs onto ' + A.n + ' (' + dec(A.h) + ' cm) to see the band!');
+    cards.append(bugCard(A, lvl === 5), bugCard(B, lvl === 5));
+    const cols = colsFor(A.h, B.h);
+    cur.paper = paperSum({ cols: cols, rows: lvl >= 4 ? ['input', 'input'] : [A.h, B.h], answer: 'input', helper: 'carry', size: '1.5rem',
+      onEnter: checkPart, onRowEnter: checkPart, refocus: focusPart,
+      onDot: () => tip('No need to type the decimal point. It\'s already there! Start with the ' + (cols === 3 ? 'hundredths' : 'tenths') + ' digit.') });
+    cur.paper.box.enable(false);
+    cur.paper.rows.forEach(r => { if (r) r.enable(false); });
+    cur.side = el('div', 'side');
+    if (lvl < 5) paintFracs();
+    const row = el('div', 'mathrow');
+    row.append(cur.paper.el, cur.side);
+    work(cards, row);
+    caption(B.n + ' climbs onto ' + A.n + ' to see the band!');
     controls([{ label: 'Check', disabled: true, on: () => {} }, { label: 'Hint', soft: true, disabled: true, on: () => {} }]);
 
     const a1 = actor(A), a2 = actor(B);
@@ -1380,254 +1537,200 @@
     cur.actors = [a1, a2];
     sc.pointer = { h: total, text: '? cm', fill: '#EFE7FF' };
     redraw();
-
-    if (!cur.guided && tier >= 2 && results.length >= 2 && Math.random() < 0.4) {
+    if (lvl <= 3 && tier >= 2 && results.length >= 2 && Math.random() < 0.4) {
       cur.claim = Math.random() < 0.7 ? stackClaim(A.h, B.h) : { v: total, right: true };
       boomer.made += cur.claim.right ? 0 : 1;
       showBoomer(dec(cur.claim.v));
-      caption('The tape is foggy! Boomer says the stack is ' + dec(cur.claim.v) + ' cm tall. Add the heights yourself: ' + dec(A.h) + ' + ' + dec(B.h) + '. Is Boomer right?', 'boomer');
-    } else if (cur.guided) {
-      caption('The tape is foggy! Use the guest book to add ' + dec(A.h) + ' cm + ' + dec(B.h) + ' cm, one step at a time. Step 1: ' + cur.steps[0].title);
-    } else {
-      caption('The tape is foggy! How tall is the stack? Add ' + dec(A.h) + ' + ' + dec(B.h) + ' on paper, starting with the ' + (colsFor(A.h, B.h) === 3 ? 'hundredths' : 'tenths') + '.');
     }
     phase = 'answer';
-    if (cur.guided) { tip('Type each answer, then press Enter.'); stepStart(); }
-    else {
-      tip('Type the ' + (colsFor(A.h, B.h) === 3 ? 'hundredths' : 'tenths') + ' digit first. Tap a carry box to write a 1.');
-      cur.paper.box.enable(true);
-      controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkStack }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, on: stackHint }]);
-      cur.paper.box.focus();
-    }
     round.shown();
+    startPart(true);
+  }
+  function paintFracs() {
+    const f = fracAsk(cur.a, cur.b, cur.ask ? cur.answer : null, { ask: cur.ask, onEnter: checkPart });
+    cur.fr = f;
+    cur.side.replaceChildren(f.el);
+  }
+  function focusPart() {
+    const p = cur.parts[cur.pi];
+    if (!p) return;
+    if (p.k === 'rows') { const r = cur.paper.rows.find(x => x && x.value() === null) || cur.paper.rows[0]; r.focus(); }
+    else if (p.k === 'sum') cur.paper.box.focus();
+    else { const i = cur.fr.inputs.find(x => !x.input.disabled && !x.input.value) || cur.fr.inputs.find(x => !x.input.disabled); if (i) i.input.focus(); }
+  }
+  function partWords(p, first) {
+    const A = cur.A, B = cur.B, cols = colsFor(cur.a, cur.b);
+    if (p.k === 'rows') return cur.lvl === 5
+      ? 'The tape is foggy! The guest book gives the heights as fractions: ' + asFrac(A.h) + ' cm and ' + asFrac(B.h) + ' cm. Write them as decimals on the paper. Line up the decimal points!'
+      : 'The tape is foggy! Copy the heights onto the paper: ' + A.n + ' is ' + dec(A.h) + ' cm, and ' + B.n + ' is ' + dec(B.h) + ' cm. Put each digit under its place.';
+    if (p.k === 'sum') {
+      const start = cur.claim ? 'Boomer says the stack is ' + dec(cur.claim.v) + ' cm tall. Is he right? ' : first ? 'The tape is foggy! How tall is the stack? ' : 'Now add. ';
+      return start + 'Add ' + dec(cur.a) + ' + ' + dec(cur.b) + ' on paper, starting with the ' + (cols === 3 ? 'hundredths' : 'tenths') + '.';
+    }
+    return cur.ask === 'all' ? 'Now write the stack as fractions. Fill in the tops.' : 'Now write the total as a fraction. Fill in the top.';
+  }
+  function startPart(first) {
+    const p = cur.parts[cur.pi];
+    const rows = cur.paper.rows.filter(Boolean);
+    rows.forEach(r => r.enable(p.k === 'rows'));
+    cur.paper.box.enable(p.k === 'sum');
+    if (cur.fr) cur.fr.inputs.forEach(x => { if (!x.input.classList.contains('ok') && !x.input.classList.contains('shown')) x.input.disabled = p.k !== 'fracs'; });
+    if (p.k === 'sum' && cur.lvl === 5 && !cur.fr) paintFracs();
+    if (p.k === 'fracs' && cur.fr) cur.fr.inputs.forEach(x => { x.input.disabled = false; });
+    const news = first && levelNews ? levelNews + ' ' : '';
+    if (first) levelNews = '';
+    caption(news + partWords(p, first), cur.claim && p.k === 'sum' ? 'boomer' : '');
+    tip(p.k === 'sum' ? 'Type the ' + (colsFor(cur.a, cur.b) === 3 ? 'hundredths' : 'tenths') + ' digit first. Tap a carry box to write a 1.'
+      : p.k === 'rows' ? 'Click a box to pick it. Use Tab to move to the next height.' : 'Type each top number, then press Enter.');
+    controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkPart }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, disabled: p.hinted, on: stackHint }]);
+    focusPart();
     syncData();
   }
-
-  function buildPlain(cards) {
-    const a = cur.a, b = cur.b;
-    cur.paper = paperSum(a, b, { cols: colsFor(a, b), answer: 'input', carries: true, onEnter: checkStack,
-      refocus: () => cur.paper.box.focus(),
-      onDot: () => tip('No need to type the decimal point. It\'s already there! Start with the ' + (colsFor(a, b) === 3 ? 'hundredths' : 'tenths') + ' digit.') });
-    cur.paper.box.enable(false);
-    cur.paper.el.style.fontSize = '1.5rem';
-    cur.side = el('div', 'side');
-    cur.side.append(fracLine(a, b, null));
-    const row = el('div', 'mathrow');
-    row.append(cur.paper.el, cur.side);
-    work(cards, row);
-  }
-
-  function buildGuided(cards) {
-    const a = cur.a, b = cur.b, den = colsFor(a, b) === 2 ? 10 : 100, total = a + b;
-    cur.den = den;
-    cur.steps = [];
-    const list = el('div', 'steps');
-    const num = h => den === 10 ? h / 10 : h;
-    const tops = {};   // the fraction tops in the "add" step fill in as they're found
-    [cur.A, cur.B].forEach(X => {
-      if (den === 100 && den10(X.h)) {
-        const row = el('div', 'gstep wait');
-        const inp = numInput(dec(X.h) + ' centimeters in hundredths', checkStep);
-        row.append(el('span', 'n', ''), el('span', '', dec(X.h) + ' cm ='), fracWithInput(inp, 100));
-        list.append(row);
-        cur.steps.push({ type: 'convert', h: X.h, input: inp, row: row, answer: X.h, tries: 0, title: 'Write ' + dec(X.h) + ' cm in hundredths.' });
-      }
-    });
-    const addRow = el('div', 'gstep wait');
-    const addInp = numInput('Total, in ' + (den === 10 ? 'tenths' : 'hundredths'), checkStep);
-    const topA = el('span', '', den === 100 && den10(a) ? '?' : String(num(a)));
-    const topB = el('span', '', den === 100 && den10(b) ? '?' : String(num(b)));
-    tops[a] = topA; tops[b + 'b'] = topB;
-    const fracOf = top => { const f = el('span', 'sf'); const t = el('span', 't'); t.append(top); f.append(t, el('span', 'b', String(den))); return f; };
-    addRow.append(el('span', 'n', ''), fracOf(topA), el('span', '', '+'), fracOf(topB), el('span', '', '='), fracWithInput(addInp, den));
-    list.append(addRow);
-    cur.steps.push({ type: 'add', input: addInp, row: addRow, answer: num(total), tries: 0, title: 'Add the ' + (den === 10 ? 'tenths' : 'hundredths') + ': add the numbers on top.' });
-    const decRow = el('div', 'gstep wait');
-    const box = decimalBox({ places: den === 10 ? 1 : 2, label: 'The total as a decimal', onEnter: checkStep, small: true });
-    box.enable(false);
-    const totalTop = el('span', '', '?');
-    decRow.append(el('span', 'n', ''), fracOf(totalTop), el('span', '', 'cm ='), box.el, el('span', '', 'cm'));
-    list.append(decRow);
-    cur.steps.push({ type: 'decimal', box: box, row: decRow, answer: total, tries: 0, title: 'Write the total as a decimal.' });
-    cur.steps.forEach((x, i) => { x.row.firstChild.textContent = (i + 1) + '.'; });
-    cur.fill = { topA: topA, topB: topB, totalTop: totalTop };
-    cur.paper = paperSum(a, b, { cols: colsFor(a, b), answer: null, carries: false, small: true });
-    cur.paper.el.style.fontSize = '1.3rem';
-    const row = el('div', 'mathrow');
-    row.append(list, cur.paper.el);
-    work(cards, row);
-    cur.stepIdx = 0;
-  }
-  function stepStart() {
-    const s = cur.steps[cur.stepIdx];
-    cur.steps.forEach((x, i) => { x.row.classList.toggle('now', i === cur.stepIdx); x.row.classList.toggle('wait', i > cur.stepIdx); });
-    if (s.box) { s.box.enable(true); s.box.focus(); } else { s.input.disabled = false; s.input.focus(); }
-    controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkStep }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, on: stepHint }]);
-  }
-  function stepWords(s, gentle) {
-    const den = cur.den, a = cur.a, b = cur.b, total = a + b;
-    if (s.type === 'convert') return gentle
-      ? 'Each tenth is worth 10 hundredths. How many hundredths is ' + (s.h / 10) + ' tenths?'
-      : dec(s.h) + ' is ' + (s.h / 10) + ' tenths. Each tenth is 10 hundredths, so ' + (s.h / 10) + ' tenths = ' + s.h + ' hundredths: ' + s.h + '/100.';
-    const n = h => den === 10 ? h / 10 : h, unit = den === 10 ? 'tenths' : 'hundredths';
-    if (s.type === 'add') return gentle
-      ? 'The pieces are the same size (' + unit + '), so add the numbers on top: ' + n(a) + ' + ' + n(b) + '. The bottom stays ' + den + '.'
-      : n(a) + ' + ' + n(b) + ' = ' + n(total) + ', so the stack is ' + n(total) + '/' + den + ' cm.';
-    const whole = den === 10 ? '10 tenths' : '100 hundredths';
-    return gentle
-      ? whole + ' make 1 whole. How many wholes are in ' + n(total) + '/' + den + ', and how many ' + unit + ' are left?'
-      : n(total) + '/' + den + ' = ' + fracText(total, den) + ', which is written ' + dec(total) + '.';
-  }
-  function stepHint() {
+  function stackHint() {
     if (phase !== 'answer') return;
+    const p = cur.parts[cur.pi];
     cur.helped = true;
-    const s = cur.steps[cur.stepIdx];
-    caption('Hint: ' + stepWords(s, true));
+    p.hinted = true;
+    let t;
+    if (p.k === 'rows') t = cur.lvl === 5
+      ? (den10(cur.a) ? cur.a / 10 + '/10 is ' + (cur.a / 10) + ' tenths' : cur.a + '/100 is ' + cur.a + ' hundredths') + ', so it\'s written ' + dec(cur.a) + '. Each digit goes under its place: O, t, h.'
+      : 'Line up the decimal points. ' + placeWords(cur.a) + ' Put each digit under O, t or h.';
+    else if (p.k === 'sum') {
+      t = 'Add one column at a time, starting on the right. ';
+      if (den10(cur.a) !== den10(cur.b)) t += dec(den10(cur.a) ? cur.a : cur.b) + ' has no hundredths, so think of it as ' + dec2(den10(cur.a) ? cur.a : cur.b) + '. ';
+      t += '10 hundredths make 1 tenth, and 10 tenths make 1 whole.';
+    } else t = fracWords(true);
+    caption('Hint: ' + t);
     const hb = $('#hintBtn');
     if (hb) hb.disabled = true;
-    if (s.box) s.box.focus(); else s.input.focus();
+    focusPart();
   }
-  function checkStep() {
-    if (phase !== 'answer' || !cur.steps) return;
-    const s = cur.steps[cur.stepIdx];
-    const v = s.box ? s.box.value() : (s.input.value === '' ? null : Number(s.input.value));
-    if (v === null) { tip('Type an answer first.'); return; }
-    cur.typed.push(s.box ? s.box.typed() : String(v));
-    if (v === s.answer) {
-      RealmFX.correct();
-      if (s.box) s.box.set(s.answer, 'ok'); else { markInput(s.input, 'ok'); s.input.disabled = true; }
-      stepDone(s);
-      return;
+  function fracWords(gentle) {
+    const a = cur.a, b = cur.b, t = a + b, den = colsFor(a, b) === 2 ? 10 : 100, n = h => den === 10 ? h / 10 : h;
+    const conv = [a, b].filter(h => den === 100 && den10(h)).map(h => dec(h) + ' = ' + h + '/100');
+    if (gentle) return (conv.length ? 'Each tenth is 10 hundredths, so ' + conv.join(' and ') + '. ' : '') + 'Then add the tops: ' + n(a) + ' + ' + n(b) + '. The bottom stays ' + den + '.';
+    return n(a) + '/' + den + ' + ' + n(b) + '/' + den + ' = ' + n(t) + '/' + den + '.';
+  }
+  function checkPart() {
+    if (phase !== 'answer' || cur.kind !== 'stack') return;
+    const p = cur.parts[cur.pi];
+    if (p.k === 'rows') {
+      const r = cur.paper.rows, v = r.map(x => x.value());
+      if (v.some(x => x === null)) { tip('Write both heights on the paper first.'); focusPart(); return; }
+      cur.typed.push(r[0].typed() + '+' + r[1].typed());
+      const want = [cur.a, cur.b], ok = v.map((x, i) => x === want[i]);
+      if (ok[0] && ok[1]) { RealmFX.correct(); r.forEach((x, i) => x.set(want[i], 'ok')); return partDone(p); }
+      RealmFX.wrong();
+      p.tries++;
+      const i = ok[0] ? 1 : 0, h = want[i], wrong = v[i];
+      if (p.tries === 1) {
+        r.forEach((x, k) => { if (!ok[k]) { x.bad(); x.clear(); } });
+        let why = placeWords(h);
+        if (wrong * 10 === h) why = 'You wrote ' + dec2(wrong) + ', which is ' + wrong + ' hundredths. ' + why;
+        caption('Check ' + [cur.A, cur.B][i].n + '\'s height' + (cur.lvl === 5 ? ' (' + asFrac(h) + ' cm)' : '') + '. ' + why + ' Try again!', 'bad');
+        focusPart();
+        return;
+      }
+      cur.missed = true;
+      r.forEach((x, k) => x.set(want[k], ok[k] ? 'ok' : 'shown'));
+      caption('Here are the heights, lined up: ' + dec(cur.a) + ' and ' + dec(cur.b) + '. ' + placeWords(h), 'bad');
+      return partDone(p, true);
     }
+    if (p.k === 'sum') {
+      const box = cur.paper.box, cols = colsFor(cur.a, cur.b), v = box.value();
+      if (v === null || box.filled() < cols - 1) { tip('Fill in each column, starting with the ' + (cols === 3 ? 'hundredths' : 'tenths') + '.'); box.focus(); return; }
+      tip('');
+      cur.typed.push(box.typed());
+      if (v === cur.answer) { RealmFX.correct(); box.set(cur.answer, 'ok'); cur.paper.lock(); return partDone(p); }
+      RealmFX.wrong();
+      box.bad();
+      p.tries++;
+      if (p.tries === 1) { caption(sumFeedback(cur.a, cur.b, v) + ' Try again!', 'bad'); box.clear(); box.focus(); return; }
+      cur.missed = true;
+      box.set(cur.answer, 'shown');
+      cur.paper.showCarries(cur.a, cur.b);
+      caption('The stack is ' + dec(cur.answer) + ' cm. ' + sumExplain(cur.a, cur.b), 'bad');
+      return partDone(p, true);
+    }
+    // fractions
+    const list = cur.fr.inputs;
+    if (list.some(x => x.input.value === '')) { tip('Fill in every top number first.'); focusPart(); return; }
+    cur.typed.push(list.map(x => x.input.value).join('/'));
+    const ok = list.map(x => Number(x.input.value) === x.answer);
+    if (ok.every(Boolean)) { RealmFX.correct(); list.forEach(x => { markInput(x.input, 'ok'); x.input.disabled = true; }); return partDone(p); }
     RealmFX.wrong();
-    s.tries++;
-    if (s.tries === 1) {
-      if (s.box) { s.box.bad(); s.box.clear(); s.box.focus(); } else { markInput(s.input, 'bad'); s.input.select(); }
-      caption('Not quite. ' + stepWords(s, true) + ' Try again!', 'bad');
+    p.tries++;
+    if (p.tries === 1) {
+      list.forEach((x, i) => { if (!ok[i]) { markInput(x.input, 'bad'); x.input.value = ''; } else { markInput(x.input, 'ok'); x.input.disabled = true; } });
+      caption('Not quite. ' + fracWords(true) + ' Try again!', 'bad');
+      focusPart();
       return;
     }
     cur.missed = true;
-    if (s.box) s.box.set(s.answer, 'shown'); else { s.input.value = String(s.answer); markInput(s.input, 'shown'); s.input.disabled = true; }
-    caption(stepWords(s, false), 'bad');
-    stepDone(s);
+    list.forEach((x, i) => { x.input.value = String(x.answer); markInput(x.input, ok[i] ? 'ok' : 'shown'); x.input.disabled = true; });
+    caption(fracWords(false), 'bad');
+    partDone(p, true);
   }
-  function stepDone(s) {
-    if (s.tries > 0) cur.retried = true;
-    if (s.type === 'convert') {
-      if (s.h === cur.a) cur.fill.topA.textContent = String(s.h);
-      if (s.h === cur.b) cur.fill.topB.textContent = String(s.h);
-    }
-    if (s.type === 'add') cur.fill.totalTop.textContent = String(s.answer);
-    cur.stepIdx++;
-    if (cur.stepIdx < cur.steps.length) {
-      const nx = cur.steps[cur.stepIdx];
-      caption((s.tries < 2 ? 'Yes! ' : '') + stepWords(s, false) + ' Step ' + (cur.stepIdx + 1) + ': ' + nx.title, s.tries < 2 ? 'good' : 'bad');
-      setTimeout(() => { if (phase === 'answer') stepStart(); }, 0);
+  function partDone(p, shown) {
+    if (p.tries > 0) cur.retried = true;
+    cur.pi++;
+    if (cur.pi < cur.parts.length) {
+      if (!shown) {
+        startPart(false);
+        const c = $('#caption');
+        caption('Yes! ' + c.textContent, 'good');
+      } else {
+        const why = $('#caption').textContent;
+        startPart(false);
+        caption(why + ' ' + partWords(cur.parts[cur.pi], false), 'bad');
+      }
       return;
     }
     stackSolved(!cur.missed);
   }
-
-  function stackHint() {
-    if (phase !== 'answer') return;
-    cur.helped = true;
-    const a = cur.a, b = cur.b;
-    let t = 'Add one column at a time, starting on the right. ';
-    if (den10(a) !== den10(b)) t += dec(den10(a) ? a : b) + ' has no hundredths, so think of it as ' + dec2(den10(a) ? a : b) + '. ';
-    t += '10 hundredths make 1 tenth, and 10 tenths make 1 whole.';
-    caption('Hint: ' + t);
-    const hb = $('#hintBtn');
-    if (hb) hb.disabled = true;
-    cur.paper.box.focus();
-  }
-  function stackFeedback(v) {
-    const a = cur.a, b = cur.b, t = a + b, c = carries(a, b), cols = colsFor(a, b);
-    if (den10(a) !== den10(b)) {
-      const tt = den10(a) ? a : b, hh = den10(a) ? b : a;
-      if (v === tt / 10 + hh) return 'Line up the decimal points! ' + dec(tt) + ' is ' + (tt / 10) + ' tenths, the same as ' + tt + ' hundredths (' + dec2(tt) + '). So add ' + tt + ' hundredths and ' + hh + ' hundredths.';
-    }
-    if (den10(a) && den10(b) && t >= 100 && v === t / 10) return (a / 10) + ' tenths + ' + (b / 10) + ' tenths = ' + (t / 10) + ' tenths. ' + (t / 10) + ' tenths is 1 whole and ' + (t / 10 - 10) + ' tenths, so write a 1 in the ones place.';
-    if (v === noCarrySum(a, b) && (c.c1 || c.c2)) {
-      if (cols === 3 && c.c1) { const s = hundOf(a) + hundOf(b); return 'Check your regrouping. In the hundredths, ' + hundOf(a) + ' + ' + hundOf(b) + ' = ' + s + ' hundredths. That\'s 1 tenth and ' + (s - 10) + ' hundredths, so write ' + (s - 10) + ' and carry 1 to the tenths.'; }
-      const s = tenthsOf(a) + tenthsOf(b) + (c.c1 ? 1 : 0);
-      return 'Check your regrouping. In the tenths, ' + s + ' tenths is 1 whole and ' + (s - 10) + ' tenths, so write ' + (s - 10) + ' and carry 1 to the ones.';
-    }
-    const want = String(t).padStart(cols, '0'), got = String(v).padStart(cols, '0');
-    if (got.split('').reverse().join('') === want && got !== want) return 'It looks like you typed from the left. In a sum, start on the right: type the ' + (cols === 3 ? 'hundredths' : 'tenths') + ' digit first.';
-    return 'Not quite. Add one column at a time, starting on the right. Remember: 10 hundredths make 1 tenth, and 10 tenths make 1 whole.';
-  }
-  function stackExplain() {
-    const a = cur.a, b = cur.b, t = a + b, cols = colsFor(a, b), parts = [];
-    let carry = 0;
-    if (cols === 3) {
-      const s = hundOf(a) + hundOf(b);
-      parts.push('Hundredths: ' + hundOf(a) + ' + ' + hundOf(b) + ' = ' + s + (s >= 10 ? ', so write ' + (s - 10) + ' and carry 1.' : '.'));
-      carry = s >= 10 ? 1 : 0;
-    }
-    const s2 = tenthsOf(a) + tenthsOf(b) + carry;
-    parts.push('Tenths: ' + tenthsOf(a) + ' + ' + tenthsOf(b) + (carry ? ' + 1' : '') + ' = ' + s2 + (s2 >= 10 ? ', so write ' + (s2 - 10) + ' and carry 1.' : '.'));
-    const s3 = onesOf(a) + onesOf(b) + (s2 >= 10 ? 1 : 0);
-    parts.push('Ones: ' + s3 + '.');
-    return 'The stack is ' + dec(t) + ' cm. ' + parts.join(' ');
-  }
-  function checkStack() {
-    if (phase !== 'answer' || cur.guided) return;
-    const box = cur.paper.box, cols = colsFor(cur.a, cur.b);
-    const v = box.value();
-    if (v === null || box.filled() < cols - 1) { tip('Fill in each column, starting with the ' + (cols === 3 ? 'hundredths' : 'tenths') + '.'); box.focus(); return; }
-    tip('');
-    cur.typed.push(box.typed());
-    if (v === cur.answer) { box.set(cur.answer, 'ok'); stackSolved(true); return; }
-    RealmFX.wrong();
-    box.bad();
-    cur.tries++;
-    if (cur.tries === 1) {
-      caption(stackFeedback(v) + ' Try again!', 'bad');
-      box.clear();
-      box.focus();
-      return;
-    }
-    cur.missed = true;
-    box.set(cur.answer, 'shown');
-    cur.paper.showCarries(cur.a, cur.b);
-    stackSolved(false, stackExplain());
-  }
-  async function stackSolved(right, why) {
+  function stackSolved(right) {
     phase = 'shown';
     const a = cur.a, b = cur.b, t = a + b;
-    if (cur.guided) cur.paper.showAnswer(t);
-    else { cur.paper.lock(); cur.side.replaceChildren(fracLine(a, b, t)); }
+    cur.paper.lock();
+    if (!cur.ask) cur.side.replaceChildren(fracLine(a, b, t));
+    else { const tail = el('div', 'fr'); if (t >= 100) { tail.append(document.createTextNode('= '), hFrac(t, colsFor(a, b) === 2 ? 10 : 100)); cur.side.append(tail); } }
     clearFog();
     sc.pointer = { h: t, text: dec(t) + ' cm' };
     renderOver();
-    const helped = cur.helped || cur.tries > 0 || !!cur.retried;
+    const helped = cur.helped || cur.retried;
     if (right) {
       RealmFX.correct();
       cur.actors.forEach(x => dance(x));
-      const fr = colsFor(a, b) === 2 ? fracText(a, 10, true) + ' + ' + fracText(b, 10, true) + ' = ' + fracText(t, 10, true) : fracText(a, 100, true) + ' + ' + fracText(b, 100, true) + ' = ' + fracText(t, 100, true);
-      caption((helped ? 'You got it! ' : pick(PRAISE) + ' ') + dec(a) + ' + ' + dec(b) + ' = ' + dec(t) + ' cm' + (cur.claim && !cur.claim.right ? '.' : ' (' + fr + '). The fog clears, and the tape agrees!') + boomerVerdict(true), 'good');
-      if (cur.guided && !helped) memory.guided = (memory.guided || 0) + 1;
+      caption((helped ? 'You got it! ' : pick(PRAISE) + ' ') + dec(a) + ' + ' + dec(b) + ' = ' + dec(t) + ' cm' + (cur.claim && !cur.claim.right ? '.' : '. The fog clears, and the tape agrees!') + boomerVerdict(true), 'good');
     } else {
-      caption((why || 'Here\'s the whole stack: ' + dec(a) + ' + ' + dec(b) + ' = ' + dec(t) + ' cm.') + boomerVerdict(false), 'bad');
+      caption($('#caption').textContent + ' The fog clears: the stack is ' + dec(t) + ' cm.' + boomerVerdict(false), 'bad');
     }
+    levelAfter(right && !helped, right);
     remember(cur.A, false);
     remember(cur.B, false);
-    finish({ prompt: dec(a) + ' + ' + dec(b) + (cur.guided ? ' (steps)' : ''), answer: cur.typed.join(' → '), correct: right, hintUsed: !right || helped, bug: cur.B });
+    finish({ prompt: dec(a) + ' + ' + dec(b) + ' (level ' + cur.lvl + ')', answer: cur.typed.join(' → '), correct: right, hintUsed: !right || helped, bug: cur.B });
   }
 
-  /* ── Building: pick two guests to reach the heart ── */
-
+  /* ── Building: reach the heart ──
+   * pick     choose two guests whose heights add to the heart's height. Their heights fill the paper
+   *          and the student adds them (hundredths first) before stacking.
+   * missing  one guest is already standing there. Subtract on paper to find how tall the guest on top
+   *          must be; then a guest that tall arrives. Shown as fractions too (125/100 − 80/100 = 45/100),
+   *          which is subtracting like fractions (4.NF.3a); subtracting decimals as decimals is 5.NBT.7.
+   */
   async function startBuild() {
     phase = 'walking';
     const p = makeBuild(tier, usedPairs);
-    cur = { kind: 'build', target: p.target, pair: p.pair, choices: p.choices, picked: [], answer: p.target, tries: 0, helped: false, typed: [] };
-    sc.tape = { labels: 'whole', halfTick: true, fog: true };
+    const missing = tier >= 2 && results.length >= 2 && Math.random() < 0.4;
+    cur = { kind: 'build', type: missing ? 'missing' : 'pick', target: p.target, pair: p.pair, choices: p.choices, picked: [], answer: p.target, tries: 0, helped: false, typed: [] };
+    sc.tape = { labels: 'whole', fog: true };
     sc.lens = null; sc.band = null; sc.pointer = null; sc.jumps = null; sc.marks = [];
     sc.heart = { h: p.target, tag: dec(p.target) + ' cm', lit: false };
     clearActors();
     hideBoomer();
     redraw();
     stage.setAttribute('aria-label', 'A heart hangs ' + dec(p.target) + ' centimeters above the floor. The measuring tape is foggy.');
+    if (missing) return startMissing();
     const cards = el('div', 'cards');
     cur.buttons = p.choices.map((bug, i) => {
       const btn = el('button', 'bugcard');
@@ -1639,15 +1742,24 @@
       cards.append(btn);
       return btn;
     });
-    cur.mathrow = el('div', 'mathrow');
-    work(cards, cur.mathrow);
+    cur.paper = paperSum({ cols: 3, rows: [null, null], answer: 'input', helper: 'carry', size: '1.3rem',
+      onEnter: doStack, refocus: () => cur.paper.box.focus(), onChange: updateStackBtn,
+      onDot: () => tip('No need to type the decimal point. Start with the hundredths digit.') });
+    cur.side = el('div', 'side');
+    const row = el('div', 'mathrow');
+    row.append(cur.paper.el, cur.side);
+    work(cards, row);
     phase = 'pick';
     paintPicks();
-    caption('Hang the heart! It hangs ' + dec(p.target) + ' cm up. Pick two guests whose heights add up to exactly ' + dec(p.target) + ' cm, then press Stack them!');
-    tip('Click two guests or press their numbers, then press Enter.');
-    phase = 'pick';
+    caption('Hang the heart! It hangs ' + dec(p.target) + ' cm up. Pick two guests whose heights add up to exactly ' + dec(p.target) + ' cm. Add them on paper, then press Stack them!');
+    tip('Pick two guests (click them or press 1–5), then add on paper.');
     round.shown();
     syncData();
+  }
+  function goalLine() {
+    const g = el('div', 'fr');
+    g.append(el('span', 'word inline', 'The heart:'), document.createTextNode(dec(cur.target) + ' cm ='), hFrac(cur.target, 100, true));
+    return g;
   }
   function paintCards() {
     const pk = cur.picked;
@@ -1660,90 +1772,116 @@
       b.disabled = phase !== 'pick';
     });
   }
+  function pickedHeights() { return [0, 1].map(i => cur.picked.length > i ? cur.choices[cur.picked[i]].h : null); }
   function paintPicks() {
-    const pk = cur.picked;
     paintCards();
-    const a = pk.length > 0 ? cur.choices[pk[0]].h : null, b = pk.length > 1 ? cur.choices[pk[1]].h : null;
-    const cols = a !== null && b !== null ? colsFor(a, b) : 3;
-    const paper = a !== null && b !== null ? paperSum(a, b, { cols: cols, answer: null, carries: false, small: true }) : paperSum(null, null, { cols: 3, answer: null, carries: false, small: true });
-    cur.paper = paper;
-    const side = el('div', 'side');
-    if (a !== null && b !== null) side.append(fracLine(a, b, null));
-    const goal = el('div', 'fr');
-    goal.append(el('span', 'word inline', 'The heart:'), document.createTextNode(dec(cur.target) + ' cm ='), hFrac(cur.target, 100, true));
-    side.prepend(goal);
-    cur.side = side;
-    cur.mathrow.replaceChildren(paper.el, side);
+    const [a, b] = pickedHeights();
+    cur.paper.setRow(0, a);
+    cur.paper.setRow(1, b);
+    cur.paper.box.clear();
+    cur.paper.box.enable(phase === 'pick' && b !== null);
+    cur.side.replaceChildren(goalLine(), fracAsk(a, b, null, { den: 100 }).el);
     if (phase === 'pick') {
-      controls([{ label: 'Stack them!', id: 'stackBtn', disabled: pk.length < 2, noFocus: true, on: doStack }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, disabled: cur.helped, on: buildHint }]);
+      controls([{ label: 'Stack them!', id: 'stackBtn', disabled: true, noFocus: true, on: doStack }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, disabled: cur.helped, on: buildHint }]);
+      updateStackBtn();
     }
   }
+  function updateStackBtn() {
+    const sb = $('#stackBtn');
+    if (sb) sb.disabled = !(cur.picked.length === 2 && cur.paper.box.filled() >= 2);
+  }
   function togglePick(i) {
-    if (phase !== 'pick' || i < 0 || i >= cur.choices.length) return;
+    if (phase !== 'pick' || cur.type !== 'pick' || i < 0 || i >= cur.choices.length) return;
     const pk = cur.picked, at = pk.indexOf(i);
     if (at >= 0) pk.splice(at, 1);
     else if (pk.length < 2) pk.push(i);
     else pk[1] = i;
     if (actors.length) { clearActors(); sc.pointer = null; sc.tape.fog = true; redraw(); }
     paintPicks();
-    if (pk.length === 2) { const sb = $('#stackBtn'); if (sb) sb.focus(); }
+    if (pk.length === 2) {
+      cur.paper.box.focus();
+      tip('Add on paper, hundredths first. Then press Stack them!');
+    }
   }
   function buildHint() {
-    if (phase !== 'pick') return;
+    if (phase !== 'pick' && phase !== 'answer') return;
     cur.helped = true;
-    const t = cur.target, pk = cur.picked;
-    if (pk.length) {
-      const x = cur.choices[pk[0]];
+    const t = cur.target;
+    if (cur.type === 'missing') {
+      caption('Hint: the heart is at ' + t + ' hundredths, and ' + cur.G.n + ' is ' + cur.G.h + ' hundredths. Subtract one column at a time, starting with the hundredths. If a top digit is too small, regroup: trade 1 tenth for 10 hundredths, or 1 whole for 10 tenths.');
+    } else if (cur.picked.length) {
+      const x = cur.choices[cur.picked[0]];
       caption('Hint: the heart is at ' + t + ' hundredths (' + dec(t) + ' cm). ' + x.n + ' is ' + x.h + ' hundredths (' + dec(x.h) + ' cm). How many more hundredths do you need? Look for a guest that tall.');
     } else {
       caption('Hint: pick one guest first. Then work out how much more height you need. Thinking in hundredths helps: ' + dec(t) + ' cm is ' + t + ' hundredths.');
     }
-    paintPicks();
+    const hb = $('#hintBtn');
+    if (hb) hb.disabled = true;
+    if (cur.type === 'missing') cur.paper.box.focus();
   }
-  async function stackPair(A, B) {
-    clearActors();
-    const a1 = actor(A), a2 = actor(B);
-    place(a1, -100, V.FLOOR);
+  async function stackPair(A, B, keep) {
+    if (!keep) clearActors();
+    const a1 = keep || actor(A), a2 = actor(B);
+    if (!keep) { place(a1, -100, V.FLOOR); await moveTo(a1, V.BX, V.FLOOR, 800); }
     place(a2, -100, V.FLOOR);
-    await moveTo(a1, V.BX, V.FLOOR, 800);
     await moveTo(a2, V.BX - 120, V.FLOOR, 500);
     await moveTo(a2, V.BX, yOf(A.h), 600, true);
     return [a1, a2];
   }
   async function doStack() {
     if (phase !== 'pick' || cur.picked.length < 2) return;
+    const box = cur.paper.box;
+    if (box.filled() < 2) { tip('Add the two heights on paper first, starting with the hundredths.'); box.focus(); return; }
     phase = 'stacking';
     const A = cur.choices[cur.picked[0]], B = cur.choices[cur.picked[1]];
-    const sum = A.h + B.h, t = cur.target;
-    cur.typed.push(dec(A.h) + ' + ' + dec(B.h));
-    paintPicks();
+    const sum = A.h + B.h, t = cur.target, said = box.value();
+    cur.typed.push(dec(A.h) + '+' + dec(B.h) + '=' + box.typed());
+    paintCards();
+    box.enable(false);
     controls([]);
     caption('Up they go…');
     const pair = await stackPair(A, B);
     clearFog();
-    sc.pointer = { h: sum, text: dec(sum) + ' cm' };
+    sc.pointer = { h: sum, text: sum === t ? null : dec(sum) + ' cm' };
     renderOver();
-    cur.paper.showAnswer(sum);
-    cur.side.replaceChildren(cur.side.firstChild, fracLine(A.h, B.h, sum));
-    if (sum === t) { buildDone(true, pair, A, B); return; }
+    const reach = sum === t, addOK = said === sum;
+    if (reach && addOK) {
+      box.set(sum, 'ok');
+      cur.paper.lock();
+      cur.side.replaceChildren(goalLine(), fracAsk(A.h, B.h, sum, { den: 100 }).el);
+      sc.heart.lit = true;
+      renderOver();
+      pair.forEach(x => dance(x));
+      RealmFX.correct();
+      caption(((cur.helped || cur.tries) ? 'You did it! ' : pick(PRAISE) + ' ') + 'The heart is hung! ' + dec(A.h) + ' + ' + dec(B.h) + ' = ' + dec(t) + ' cm.', 'good');
+      return buildFinish(true);
+    }
     RealmFX.wrong();
     cur.tries++;
     const diff = Math.abs(sum - t);
-    const off = diff % 10 === 0 ? (diff / 10) + (diff === 10 ? ' tenth' : ' tenths') : diff + (diff === 1 ? ' hundredth' : ' hundredths');
+    const off = diff >= 100 ? dec(diff) + ' cm' : diff % 10 === 0 ? (diff / 10) + (diff === 10 ? ' tenth' : ' tenths') : diff + (diff === 1 ? ' hundredth' : ' hundredths');
+    let msg;
+    if (reach) msg = 'These two guests do reach the heart! But check your addition: ' + sumFeedback(A.h, B.h, said);
+    else if (addOK) msg = 'Your addition is right: the stack is ' + dec(sum) + ' cm. The heart is at ' + dec(t) + ' cm, so it\'s ' + off + ' too ' + (sum > t ? 'tall' : 'short') + '.';
+    else msg = 'The stack is ' + dec(sum) + ' cm, not ' + dec(said) + ' cm, so check your addition too. The heart is at ' + dec(t) + ' cm, ' + off + (sum > t ? ' lower' : ' higher') + '.';
     if (cur.tries === 1) {
-      caption('That stack is ' + dec(sum) + ' cm tall: ' + fracText(A.h, 100, true) + ' + ' + fracText(B.h, 100, true) + ' = ' + fracText(sum, 100, true) + '. The heart is at ' + dec(t) + ' cm, so it\'s ' + off + ' too ' + (sum > t ? 'tall' : 'short') + '. Try again!', 'bad');
-      cur.picked = [];
+      caption(msg + ' Try again!', 'bad');
       phase = 'pick';
+      if (!reach) cur.picked = [];
       paintPicks();
+      if (reach) box.focus();
       return;
     }
     // Second miss: show one way that works
     const [P, Q] = cur.pair;
-    caption('Here\'s one way: ' + dec(P.h) + ' + ' + dec(Q.h) + ' = ' + dec(t) + '. The heart is at ' + t + ' hundredths. ' + P.n + ' is ' + P.h + ' hundredths, and ' + t + ' − ' + P.h + ' = ' + Q.h + ', so the other guest is ' + dec(Q.h) + ' cm.', 'bad');
     cur.picked = [cur.choices.indexOf(P), cur.choices.indexOf(Q)];
     phase = 'stacking';
     paintPicks();
     controls([]);
+    cur.paper.box.set(t, 'shown');
+    cur.paper.showCarries(P.h, Q.h);
+    cur.side.replaceChildren(goalLine(), fracAsk(P.h, Q.h, t, { den: 100 }).el);
+    caption('Here\'s one way: ' + dec(P.h) + ' + ' + dec(Q.h) + ' = ' + dec(t) + '. The heart is at ' + t + ' hundredths. ' + P.n + ' is ' + P.h + ' hundredths, and ' + t + ' − ' + P.h + ' = ' + Q.h + ', so the other guest is ' + dec(Q.h) + ' cm.', 'bad');
     sc.pointer = null;
     sc.tape.fog = 'clear';
     renderOver();
@@ -1751,27 +1889,144 @@
     sc.pointer = { h: t };
     sc.heart.lit = true;
     renderOver();
-    cur.paper.showAnswer(t);
-    cur.side.replaceChildren(cur.side.firstChild, fracLine(P.h, Q.h, t));
     again.forEach(x => dance(x));
     buildFinish(false);
   }
-  function buildDone(right, pair, A, B) {
+
+  // Missing guest: subtract to find the height of the guest who goes on top
+  function subParts(T, G) {   // column by column, regrouping when the top digit is too small
+    let o = onesOf(T), t = tenthsOf(T), h = hundOf(T);
+    const out = [];
+    if (h < hundOf(G)) {
+      if (t > 0) t--; else { o--; t = 9; out.push('There are no tenths to trade, so trade 1 whole for 10 tenths first.'); }
+      out.push('Hundredths: ' + h + ' is less than ' + hundOf(G) + ', so trade 1 tenth for 10 hundredths: ' + (h + 10) + ' − ' + hundOf(G) + ' = ' + (h + 10 - hundOf(G)) + '.');
+    } else out.push('Hundredths: ' + h + ' − ' + hundOf(G) + ' = ' + (h - hundOf(G)) + '.');
+    if (t < tenthsOf(G)) { o--; out.push('Tenths: ' + t + ' is less than ' + tenthsOf(G) + ', so trade 1 whole for 10 tenths: ' + (t + 10) + ' − ' + tenthsOf(G) + ' = ' + (t + 10 - tenthsOf(G)) + '.'); }
+    else out.push('Tenths: ' + t + ' − ' + tenthsOf(G) + ' = ' + (t - tenthsOf(G)) + '.');
+    out.push('Ones: ' + o + ' − ' + onesOf(G) + ' = ' + (o - onesOf(G)) + '.');
+    return out.join(' ');
+  }
+  function noBorrowDiff(T, G) {
+    const d = (x, y) => Math.abs(x - y);
+    return d(onesOf(T), onesOf(G)) * 100 + d(tenthsOf(T), tenthsOf(G)) * 10 + d(hundOf(T), hundOf(G));
+  }
+  function subFeedback(v) {
+    const T = cur.target, G = cur.G.h, X = T - G;
+    if (v === T + G) return 'That\'s adding! To find the missing height, subtract: ' + dec(T) + ' − ' + dec(G) + '.';
+    if (den10(G) && v === T - G / 10) return 'Line up the decimal points! ' + dec(G) + ' is ' + (G / 10) + ' tenths, the same as ' + G + ' hundredths (' + dec2(G) + ').';
+    if (v === noBorrowDiff(T, G) && v !== X) return 'Watch the regrouping! When a top digit is smaller than the one below it, trade 1 from the place on its left. Don\'t just subtract the smaller digit from the bigger one.';
+    const want = String(X).padStart(3, '0'), got = String(v).padStart(3, '0');
+    if (got.split('').reverse().join('') === want && got !== want) return 'It looks like you typed from the left. Start on the right: type the hundredths digit first.';
+    return 'Subtract one column at a time, starting with the hundredths. As fractions, it\'s ' + T + '/100 − ' + G + '/100.';
+  }
+  async function startMissing() {
+    const [G, X] = cur.pair;
+    cur.G = G; cur.X = X; cur.answer = X.h;
+    const cards = el('div', 'cards');
+    const q = el('div', 'bugcard');
+    const qt = el('span');
+    qt.append(el('span', 'who', 'The guest on top'), el('span', 'len', '? cm'), el('span', 'by', 'Subtract to find out'));
+    q.append(qt);
+    cards.append(bugCard(G), q);
+    cur.paper = paperSum({ cols: 3, op: '−', rows: [cur.target, G.h], answer: 'input', helper: 'scratch', size: '1.45rem',
+      onEnter: checkMissing, refocus: () => cur.paper.box.focus(),
+      onDot: () => tip('No need to type the decimal point. Start with the hundredths digit.') });
+    cur.paper.box.enable(false);
+    cur.side = el('div', 'side');
+    cur.side.append(goalLine(), fracAsk(cur.target, G.h, null, { op: '−', den: 100 }).el);
+    const row = el('div', 'mathrow');
+    row.append(cur.paper.el, cur.side);
+    work(cards, row);
+    caption(G.n + ' (' + dec(G.h) + ' cm) wants to hang the heart at ' + dec(cur.target) + ' cm.');
+    controls([{ label: 'Check', disabled: true, on: () => {} }, { label: 'Hint', soft: true, disabled: true, on: () => {} }]);
+    const a = actor(G);
+    place(a, -100, V.FLOOR);
+    await moveTo(a, V.BX, V.FLOOR, 900);
+    cur.base = a;
+    caption(G.n + ' (' + dec(G.h) + ' cm) wants to hang the heart at ' + dec(cur.target) + ' cm. How tall must the guest on top be? Subtract on paper: ' + dec(cur.target) + ' − ' + dec(G.h) + '.');
+    tip('Hundredths digit first. Use the small boxes on top to regroup.');
+    phase = 'answer';
+    cur.paper.box.enable(true);
+    controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkMissing }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, on: buildHint }]);
+    cur.paper.box.focus();
+    round.shown();
+    syncData();
+  }
+  // A guest of height h climbs onto the waiting guest
+  async function guestOnTop(h) {
+    const bug = bookBug(h, [cur.G.id]) || newBug(h, [cur.G.n]);
+    actors.filter(a => a !== cur.base).forEach(a => a.g.remove());
+    actors = [cur.base];
+    const [, top] = await stackPair(cur.G, bug, cur.base);
+    return { bug: bug, actor: top };
+  }
+  async function checkMissing() {
+    if (phase !== 'answer' || cur.type !== 'missing') return;
+    const box = cur.paper.box, v = box.value();
+    if (v === null || box.filled() < 2) { tip('Fill in each column, starting with the hundredths.'); box.focus(); return; }
+    cur.typed.push(box.typed());
+    const T = cur.target, X = cur.X.h, G = cur.G.h;
+    phase = 'stacking';
+    controls([]);
+    if (v === X) {
+      box.set(X, 'ok');
+      cur.paper.lock();
+      cur.side.replaceChildren(goalLine(), fracAsk(T, G, X, { op: '−', den: 100 }).el);
+      caption('Let\'s see! A guest who is ' + dec(X) + ' cm tall climbs up…');
+      const g = await guestOnTop(X);
+      clearFog();
+      sc.heart.lit = true;
+      sc.pointer = { h: T };
+      renderOver();
+      dance(g.actor); dance(cur.base);
+      RealmFX.correct();
+      caption(((cur.helped || cur.tries) ? 'You did it! ' : pick(PRAISE) + ' ') + dec(T) + ' − ' + dec(G) + ' = ' + dec(X) + '. ' + g.bug.n + ' is ' + dec(X) + ' cm tall and reaches the heart exactly!', 'good');
+      cur.X = g.bug;
+      return buildFinish(true);
+    }
+    RealmFX.wrong();
+    box.bad();
+    cur.tries++;
+    if (cur.tries === 1) {
+      let show = '';
+      if (v >= 20 && v <= 190) {   // let them see a guest that tall try it
+        caption('Let\'s try a guest who is ' + dec(v) + ' cm tall…');
+        await guestOnTop(v);
+        clearFog();
+        sc.pointer = { h: G + v, text: dec(G + v) + ' cm' };
+        renderOver();
+        show = 'A ' + dec(v) + ' cm guest makes the stack ' + dec(G + v) + ' cm: too ' + (G + v > T ? 'tall' : 'short') + '. ';
+      }
+      caption(show + subFeedback(v) + ' Try again!', 'bad');
+      phase = 'answer';
+      box.clear();
+      controls([{ label: 'Check', id: 'checkBtn', noFocus: true, on: checkMissing }, { label: 'Hint', soft: true, id: 'hintBtn', noFocus: true, disabled: cur.helped, on: buildHint }]);
+      box.focus();
+      return;
+    }
+    box.set(X, 'shown');
+    cur.paper.lock();
+    cur.side.replaceChildren(goalLine(), fracAsk(T, G, X, { op: '−', den: 100 }).el);
+    caption(dec(T) + ' − ' + dec(G) + ' = ' + dec(X) + '. ' + subParts(T, G), 'bad');
+    const g = await guestOnTop(X);
+    clearFog();
     sc.heart.lit = true;
-    sc.pointer.text = null;   // the heart's own tag already says the height
+    sc.pointer = { h: T };
     renderOver();
-    pair.forEach(x => dance(x));
-    RealmFX.correct();
-    const helped = cur.helped || cur.tries > 0;
-    caption((helped ? 'You did it! ' : pick(PRAISE) + ' ') + 'The heart is hung! ' + dec(A.h) + ' + ' + dec(B.h) + ' = ' + dec(cur.target) + ' cm (' + fracText(A.h, 100, true) + ' + ' + fracText(B.h, 100, true) + ' = ' + fracText(cur.target, 100, true) + ').', 'good');
-    buildFinish(right);
+    dance(g.actor);
+    cur.X = g.bug;
+    buildFinish(false);
   }
   function buildFinish(right) {
     phase = 'shown';
     tip('');
-    paintCards();
-    cur.choices.forEach(b => remember(b, false));
-    finish({ prompt: 'Reach ' + dec(cur.target) + ' from ' + cur.choices.map(b => dec(b.h)).join(', '), answer: cur.typed.join(' → '), correct: right, hintUsed: !right || cur.helped || cur.tries > 0, bug: cur.choices[cur.picked[1]] || cur.pair[1] });
+    if (cur.type === 'pick') {
+      paintCards();
+      cur.choices.forEach(b => remember(b, false));
+    } else { remember(cur.G, false); remember(cur.X, false); }
+    const prompt = cur.type === 'missing' ? 'Missing: ' + dec(cur.target) + ' − ' + dec(cur.G.h) : 'Reach ' + dec(cur.target) + ' from ' + cur.choices.map(b => dec(b.h)).join(', ');
+    const bug = cur.type === 'missing' ? cur.X : cur.choices[cur.picked[1]] || cur.pair[1];
+    finish({ prompt: prompt, answer: cur.typed.join(' → '), correct: right, hintUsed: !right || cur.helped || cur.tries > 0, bug: bug });
   }
 
   document.addEventListener('keydown', e => {
@@ -1780,6 +2035,7 @@
     if (phase === 'pick' && !typing && /^[1-9]$/.test(e.key)) { e.preventDefault(); togglePick(Number(e.key) - 1); return; }
     if (phase === 'pick' && e.key === 'Enter' && !typing && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); doStack(); }
   });
+
 
   /* ── Tutorials: shown the first time, replayable from the start screen ── */
 
@@ -1792,7 +2048,7 @@
   function stand(bug) { const a = actor(bug); place(a, V.BX, V.FLOOR); return a; }
   function standOn(bottom, top) { const a = stand(bottom); const b = actor(top); place(b, V.BX, yOf(bottom.h)); return [a, b]; }
   function resetScene(tape) {
-    sc.tape = Object.assign({ labels: 'whole', halfTick: true, fog: false }, tape || {});
+    sc.tape = Object.assign({ labels: 'whole', fog: false }, tape || {});
     sc.lens = null; sc.band = null; sc.pointer = null; sc.jumps = null; sc.marks = []; sc.heart = null;
     clearActors();
     hideBoomer();
@@ -1828,30 +2084,36 @@
         scene() { resetScene({ labels: 'half' }); stand(TB('beetle', 2, 'Bean', 104)); sc.pointer = { h: 104, text: '1.04 cm' }; sc.band = [100, 110]; sc.lens = { from: 100 }; sc.marks = [{ h: 100, where: 'lens' }]; sc.jumps = { from: 100, to: 104, step: 1, where: 'lens' }; },
         big: () => bigText(fracNode(104, 100), ' cm = 1.04 cm') },
     ],
-    stack: () => [
-      { say: 'Mo (0.45 cm) climbs onto Lulu (0.7 cm) to see the band. When guests stack up, the tape gets foggy! But the guest book already has both heights.',
-        scene() { resetScene({ fog: true }); standOn(TB('lady', 0, 'Lulu', 70), TB('bee', 0, 'Mo', 45)); sc.pointer = { h: 115, text: '? cm', fill: '#EFE7FF' }; },
-        big: () => bigText('0.7 cm + 0.45 cm = ?') },
-      { say: '0.7 is 7 tenths. Each tenth is 10 hundredths, so 0.7 is 70 hundredths. On paper, a faint 0 shows that 0.7 is the same as 0.70.',
-        scene() { resetScene({ fog: true }); standOn(TB('lady', 0, 'Lulu', 70), TB('bee', 0, 'Mo', 45)); sc.pointer = { h: 115, text: '? cm', fill: '#EFE7FF' }; },
-        big: () => { const r = el('div', 'mathrow'); r.append(paperSum(70, 45, { cols: 3, answer: null, carries: false, small: true }).el, bigText('0.7 = ', fracNode(70, 100, true))); return r; } },
-      { say: 'Now both heights are in hundredths, so add the tops: 70 + 45 = 115. The stack is 115/100 cm.',
-        scene() { resetScene({ fog: true }); standOn(TB('lady', 0, 'Lulu', 70), TB('bee', 0, 'Mo', 45)); sc.pointer = { h: 115, text: '? cm', fill: '#EFE7FF' }; },
-        big: () => { const f = fracLine(70, 45, 115); f.style.fontSize = '1.6rem'; return f; } },
-      { say: '100 hundredths make 1 whole, so 115/100 is 1 and 15 hundredths: 1.15 cm. The fog clears, and the tape agrees!',
-        scene() { resetScene({ fog: 'clear' }); standOn(TB('lady', 0, 'Lulu', 70), TB('bee', 0, 'Mo', 45)); sc.pointer = { h: 115, text: '1.15 cm' }; },
-        big: () => { const r = el('div', 'mathrow'); r.append(paperSum(70, 45, { cols: 3, answer: 115, carries: false, small: true }).el, bigText(fracNode(115, 100), ' cm')); return r; } },
-    ],
-    build: () => [
-      { say: 'Hang the heart! This heart hangs 1.25 cm up. Stack two guests so the top one reaches it exactly.',
-        scene() { resetScene({ fog: true }); sc.heart = { h: 125, tag: '1.25 cm' }; }, big: () => bigText('? + ? = 1.25 cm') },
-      { say: 'Pick one guest first, like Gus (0.8 cm). 1.25 cm is 125 hundredths, and 0.8 cm is 80 hundredths. Gus needs a guest who is 125 − 80 = 45 hundredths tall.',
-        scene() { resetScene({ fog: true }); sc.heart = { h: 125, tag: '1.25 cm' }; stand(TB('beetle', 0, 'Gus', 80)); },
-        big: () => bigText(fracNode(80, 100, true), ' + ', fracNode(45, 100, true), ' = ', fracNode(125, 100, true)) },
-      { say: 'Zuzu is 0.45 cm. Zuzu climbs onto Gus and reaches the heart exactly. The heart is hung!',
-        scene() { resetScene({ fog: 'clear' }); sc.heart = { h: 125, tag: '1.25 cm', lit: true }; standOn(TB('beetle', 0, 'Gus', 80), TB('fly', 0, 'Zuzu', 45)); sc.pointer = { h: 125, text: '1.25 cm' }; },
-        big: () => bigText('0.8 + 0.45 = 1.25 cm') },
-    ],
+    stack: () => {
+      const scene = fog => () => { resetScene({ fog: fog }); standOn(TB('lady', 0, 'Lulu', 70), TB('bee', 0, 'Mo', 45)); sc.pointer = fog === true ? { h: 115, text: '? cm', fill: '#EFE7FF' } : { h: 115, text: '1.15 cm' }; };
+      const paperWith = (o) => () => { const r = el('div', 'mathrow'); r.append(paperSum(Object.assign({ cols: 3, rows: [70, 45], helper: 'carry', still: true, size: '1.6rem' }, o)).el); return r; };
+      return [
+        { say: 'Mo (0.45 cm) climbs onto Lulu (0.7 cm) to see the band. When guests stack up, the tape gets foggy! But the guest book has both heights, so you can add them.',
+          scene: scene(true), big: () => bigText('0.7 cm + 0.45 cm = ?') },
+        { say: 'Write the heights on paper with the decimal points lined up: ones under ones, tenths under tenths. A faint 0 shows that 0.7 is the same as 0.70.',
+          scene: scene(true), big: paperWith({ answer: null }) },
+        { say: 'Add from the right. Hundredths: 0 + 5 = 5. Tenths: 7 + 4 = 11 tenths, so write 1 and carry 1 to the ones (tap the box over the ones to write it). Ones: 0 + 0 + 1 = 1.',
+          scene: scene(true), big: paperWith({ answer: 115, showCarry: { o: true } }) },
+        { say: 'The stack is 1.15 cm. As fractions, that\'s 70/100 + 45/100 = 115/100. The fog clears, and the tape agrees!',
+          scene: scene('clear'), big: () => { const r = el('div', 'mathrow'); r.append(paperSum({ cols: 3, rows: [70, 45], helper: 'carry', still: true, showCarry: { o: true }, answer: 115, size: '1.4rem' }).el, fracLine(70, 45, 115)); return r; } },
+      ];
+    },
+    build: () => {
+      const heart = lit => ({ h: 125, tag: '1.25 cm', lit: !!lit });
+      return [
+        { say: 'Hang the heart! This heart hangs 1.25 cm up. Pick two guests whose heights add up to exactly 1.25 cm.',
+          scene() { resetScene({ fog: true }); sc.heart = heart(); }, big: () => bigText('? + ? = 1.25 cm') },
+        { say: 'Say you pick Gus (0.8 cm) and Zuzu (0.45 cm). Their heights go on the paper. Add from the right: 0 + 5 = 5. 8 + 4 = 12 tenths, so write 2 and carry 1. 0 + 0 + 1 = 1.',
+          scene() { resetScene({ fog: true }); sc.heart = heart(); },
+          big: () => { const r = el('div', 'mathrow'); r.append(paperSum({ cols: 3, rows: [80, 45], helper: 'carry', still: true, showCarry: { o: true }, answer: 125, size: '1.5rem' }).el, fracLine(80, 45, 125)); return r; } },
+        { say: 'Your paper says 1.25 cm, the same as the heart. Press Stack them! Zuzu climbs onto Gus and reaches the heart exactly.',
+          scene() { resetScene({ fog: 'clear' }); sc.heart = heart(true); standOn(TB('beetle', 0, 'Gus', 80), TB('fly', 0, 'Zuzu', 45)); sc.pointer = { h: 125 }; },
+          big: () => bigText('0.8 + 0.45 = 1.25 cm') },
+        { say: 'Sometimes one guest is already waiting. Subtract to find how tall the guest on top must be: 1.25 − 0.80. Tenths: 2 is less than 8, so trade 1 whole for 10 tenths: 12 − 8 = 4. The guest on top must be 0.45 cm.',
+          scene() { resetScene({ fog: true }); sc.heart = heart(); stand(TB('beetle', 0, 'Gus', 80)); },
+          big: () => { const r = el('div', 'mathrow'); r.append(paperSum({ cols: 3, op: '−', rows: [125, 80], helper: 'none', answer: 45, size: '1.5rem' }).el, fracLine(125, 80, 45, '−')); return r; } },
+      ];
+    },
   };
   let tut = null;
   function runTutorial() {
@@ -1916,16 +2178,14 @@
       lines.push('Bugs are lining up for the party! Each guest stands next to the shack\'s magnified measuring tape. Read the tape where the pointer touches it, and type the bug\'s height in centimeters.');
       lines.push(M.places === 1
         ? 'Only some marks have numbers, so work out what each small space is worth.'
-        : 'The magnifier zooms in on one tenth of a centimeter and splits it into 10 tiny spaces. Only every 10th mark has a number.');
+        : 'The magnifier zooms in on one tenth of a centimeter and splits it into 10 tiny spaces. Only every 10th mark has a number' + (maxTier() === 4 ? ', and once you\'re strong, the magnifier\'s numbers disappear!' : '.'));
       lines.push('Boomer the bouncer sometimes writes a guest\'s badge first. He makes mistakes! Measure for yourself and catch him when he\'s wrong.');
     } else if (M.kind === 'stack') {
       lines.push('Guests stand on each other\'s heads to see the band, and the tape gets foggy. Use the heights in your guest book and add them up.');
-      lines.push(guidedStage()
-        ? 'You\'ll add with fractions, one step at a time: 0.7 cm is 70/100 cm, and 70/100 + 45/100 = 115/100.'
-        : 'Add on paper with the decimal points lined up, starting with the hundredths. The fractions are shown too. Watch out for Boomer\'s mistakes!');
+      lines.push('Add on paper with the decimal points lined up, starting with the hundredths. Tap a carry box to write a 1. As you get stronger, you\'ll write the fractions and copy the heights onto the paper yourself.');
     } else {
-      lines.push('Hang hearts all over the shack! Each heart hangs at a height. Pick two guests whose heights add up to exactly that height, then press Stack them!');
-      lines.push('Thinking in hundredths helps: 1.25 cm is 125 hundredths.');
+      lines.push('Hang hearts all over the shack! Each heart hangs at a height. Pick two guests whose heights add up to exactly that height, add them on paper, then press Stack them!');
+      lines.push('Sometimes one guest is already waiting. Subtract on paper to find how tall the guest on top must be.');
     }
     lines.push(mine.status === 'mastered'
       ? 'You already mastered this one! Playing keeps it sharp.'
@@ -1953,7 +2213,7 @@
     if (!st || st.v !== 1 || !Array.isArray(st.book)) return null;
     const book = st.book.filter(b => b && KINDS[b.k] && Number.isInteger(b.h) && b.h >= 10 && b.h <= 199 && typeof b.n === 'string').slice(-BOOK_MAX);
     const nextId = Math.max(Number(st.nextId) || 1, ...book.map(b => (Number(b.id) || 0) + 1));
-    return { v: 1, book: book, tut: st.tut && typeof st.tut === 'object' ? st.tut : {}, guided: Number(st.guided) || 0, nextId: nextId };
+    return { v: 1, book: book, tut: st.tut && typeof st.tut === 'object' ? st.tut : {}, stack: { lvl: clamp(Number(st.stack && st.stack.lvl) || 1, 1, 5), wins: Number(st.stack && st.stack.wins) || 0, miss: Number(st.stack && st.stack.miss) || 0 }, nextId: nextId };
   }
   show('#intro');
   MathRealm.loadState(GAME_ID).then(d => {
