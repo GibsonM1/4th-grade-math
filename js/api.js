@@ -86,6 +86,9 @@
   };
 
   // Mirrors the built-in skills in Code.gs, so guests see the same areas as students.
+  // KEEP IN STEP: every skill added to DEFAULT_SKILLS in Code.gs needs a row here too, or
+  // its area simply will not appear for guests (the map hides an area with no skills).
+  // tests/check-guest-skills.js compares the two lists and fails if they drift apart.
   const GUEST_SKILLS = [
     ['g3.mult.a', 'Multiply by 1, 2, 5, 10', '3rd Grade Review', 20, 0.9, 4000, 3, false],
     ['g3.mult.b', 'Multiply by 3, 4, 6', '3rd Grade Review', 20, 0.9, 4000, 3, false],
@@ -109,6 +112,10 @@
     ['g4.frac.mixed', 'More than a cup (1 3/4 = 7/4)', 'Fractions', 8, 0.8, 0, 3, false],
     ['g4.frac.times', 'Feed a group (3 × 2/3 cup)', 'Fractions', 8, 0.8, 0, 3, true],
     ['g4.frac.kg', 'Kitchen scale: tenths and hundredths of a kilogram', 'Fractions', 8, 0.8, 0, 3, false],
+    ['g4.bug.tenths', 'Measure bugs in tenths of a centimeter', 'Measurement', 8, 0.8, 0, 3, false],
+    ['g4.bug.hundredths', 'Measure bugs in hundredths (every 10th mark labeled)', 'Measurement', 8, 0.8, 0, 3, false],
+    ['g4.bug.stack', 'Stack two bugs: how tall together?', 'Measurement', 8, 0.8, 0, 3, true],
+    ['g4.bug.build', 'Pick bugs that stack to a target height', 'Measurement', 8, 0.8, 0, 3, true],
   ].map(r => ({ skillId: r[0], name: r[1], zone: r[2], minItems: r[3], minAccuracy: r[4], maxMedianMs: r[5], daysNeeded: r[6], milestone: r[7] }));
 
   function readSession() {
